@@ -3,7 +3,7 @@
 ### Videos
 
 Ramdom joint control
-<video src="test_videos/arm_rd_move.webm" controls width="720" >
+<video src="https://github.com/Vapor34/STAMAN_JW/raw/main/test_videos/arm_rd_move.webm" controls width="100%" >
   您的浏览器不支持视频播放。请尝试下载视频文件或升级您的浏览器。
 </video>
 https://github.com/Vapor34/STAMAN_JW/blob/main/test_videos/arm_rd_move.webm
