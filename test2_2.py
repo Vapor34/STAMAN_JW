@@ -22,6 +22,9 @@ try:
         quat_scipy = r.as_quat() # [x,y,z,w]
         target_quat = np.array([quat_scipy[3], quat_scipy[0], quat_scipy[1], quat_scipy[2]]) # [w,x,y,z]
 
+        # --- 在循环外定义阻尼参数 ---
+        damping = 0.01  # 阻尼系数 lambda
+
         while viewer.is_running():
             step_start = time.time()
 
