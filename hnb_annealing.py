@@ -3,7 +3,7 @@ import mujoco.viewer
 import numpy as np
 import time
 from simanneal import Annealer
-# --- 在 GraspPlanner 类定义之前添加 ---
+
 
 def get_synergy_mapping(model, hand_prefix):
     """
@@ -205,7 +205,6 @@ class GraspPlanner(Annealer):
 
         return dist_score + orient_score + pose_energy + collision_penalty
 
-# --- 在你的 GraspPlanner 类外部定义一个辅助函数 ---
 def generate_new_grasp(planner, default_guess):
     """
     重采样逻辑：
@@ -213,7 +212,7 @@ def generate_new_grasp(planner, default_guess):
     2. 运行退火算法
     3. 将结果写入 data.qpos
     """
-    print("\n[系统] 正在检测到重置，生成新的随机位姿...")
+    print("\n 正在检测到重置，生成新的随机位姿...")
     
     # 随机化起点：手掌位置在瓶子上方 10cm 范围内随机漂移
     random_guess = default_guess.copy()
@@ -225,9 +224,43 @@ def generate_new_grasp(planner, default_guess):
     best_pose, energy = planner.anneal()
     
     # 将规划好的位姿写入 MuJoCo 内存
+    # 1. 设置 qpos (位置)
     planner.set_hand_pose(best_pose)
+    
+    apply_control_to_all(planner, best_pose)
+
     print(f"[完成] 新位姿能量值: {energy:.4f}")
 
+    data.qpos[0:7] = best_pose[0:7]
+
+def apply_control_to_all(planner, best_pose):
+    # 提取协同变量
+    grasp_val = np.clip(best_pose[7], 0.0, 1.0)
+    spread_val = np.clip(best_pose[8], -0.2, 0.3)
+    
+    n_act = model.nu # 执行器总数
+    for i in range(n_act):
+        act_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
+        if not act_name: continue
+        
+        name_lower = act_name.lower()
+        # 1. 处理手腕 (Wrist) - 保持固定或设定特定角度
+        if 'wr' in name_lower or 'wrist' in name_lower:
+            # 这里的控制值应对应 best_pose 中规划的手腕角度
+            # 如果没规划，通常设为 0
+            data.ctrl[i] = 0.0 
+            
+        # 2. 处理大拇指 (Thumb)
+        elif 'th' in name_lower:
+            data.ctrl[i] = grasp_val * 1.2
+            
+        # 3. 处理手指侧摆 (Spread/Abduction)
+        elif 'j4' in name_lower or 'abd' in name_lower:
+            data.ctrl[i] = spread_val
+            
+        # 4. 处理手指弯曲 (Flexion)
+        else:
+            data.ctrl[i] = grasp_val * 1.5
 
 # --- 主程序 ---
 try:
@@ -283,6 +316,7 @@ try:
             else:
                 # 当时间开始流动（哪怕只有一点点），重置标志位
                 has_planned_this_reset = False
+
 
             # 保持静态显示。如果你想看“抓取动作”，这里可以运行 mj_step
             mujoco.mj_step(model, data) #已在scene_left.xml中将gravity设置为0
