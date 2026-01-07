@@ -1,5 +1,9 @@
 # STAMAN_JW
 
+### Note Web
+
+https://www.notion.so/STAMAN-Project-28effae9587b809ea181e97d1847b070?source=copy_link
+
 ### Videos
 
 Ramdom joint control
