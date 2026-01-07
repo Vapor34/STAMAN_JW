@@ -7,8 +7,8 @@ from simanneal import Annealer
 
 def get_synergy_mapping(model, hand_prefix):
     """
-    创建一个简化的映射，将2个协同变量映射到所有手指关节。
-    返回两个列表：flex_indices (负责弯曲的关节索引), abd_indices (负责侧摆的关节索引)
+    创建一个简化的映射,将2个协同变量映射到所有手指关节。
+    返回两个列表: flex_indices (负责弯曲的关节索引), abd_indices (负责侧摆的关节索引)
     """
     flex_indices = [] # 弯曲关节 (Flexion/Curl)
     abd_indices = []  # 侧摆关节 (Abduction/Spread)
@@ -205,6 +205,30 @@ class GraspPlanner(Annealer):
 
         return dist_score + orient_score + pose_energy + collision_penalty
 
+# --- 在你的 GraspPlanner 类外部定义一个辅助函数 ---
+def generate_new_grasp(planner, default_guess):
+    """
+    重采样逻辑：
+    1. 给初始猜测加随机偏移（确保多样性）
+    2. 运行退火算法
+    3. 将结果写入 data.qpos
+    """
+    print("\n[系统] 正在检测到重置，生成新的随机位姿...")
+    
+    # 随机化起点：手掌位置在瓶子上方 10cm 范围内随机漂移
+    random_guess = default_guess.copy()
+    random_guess[0:3] += np.random.uniform(-0.08, 0.08, 3) 
+    # 随机化初始协同张开度
+    random_guess[7] = np.random.uniform(0.1, 0.5) 
+    
+    planner.state = random_guess
+    best_pose, energy = planner.anneal()
+    
+    # 将规划好的位姿写入 MuJoCo 内存
+    planner.set_hand_pose(best_pose)
+    print(f"[完成] 新位姿能量值: {energy:.4f}")
+
+
 # --- 主程序 ---
 try:
     model_path = 'shadow_hand/scene_left.xml'
@@ -214,15 +238,6 @@ try:
     # 计算 fingers joints 数量
     actual_finger_joints = model.nq - 14 
     
-    # # 构造初始猜测
-    # initial_guess = np.zeros(7 + actual_finger_joints)
-    # # 将手掌初始放在瓶子上方一点，增加成功率
-    # initial_guess[0:3] = [0.4, 0.4, 0.3] 
-    # # 初始旋转让手掌大致向下 (绕X轴转180度，取决于你的模型坐标系)
-    # # 这里的四元数只是一个粗略猜测
-    # initial_guess[3:7] = [1, 0, 0, 0] 
-    # # 手指微张
-    # initial_guess[7:] = 0
 
     # 现在的状态向量：7位手掌位姿 + 2位协同变量 = 9位
     initial_guess = np.zeros(9)
@@ -239,23 +254,46 @@ try:
     
     # 关键：足够的步数让退火算法寻优
     print("开始模拟退火规划，请耐心等待...")
-    planner.steps = 5000 # 建议至少 2000-5000
+    planner.steps = 2000 # 建议至少 2000-5000
     planner.Tmax = 10.0
     planner.Tmin = 0.01
     
-    t_start = time.time()
-    best_pose, energy = planner.anneal()
-    print(f"规划完成，耗时 {time.time()-t_start:.2f}s，最低能量: {energy:.4f}")
+    # t_start = time.time()
+    # best_pose, energy = planner.anneal()
+    # print(f"规划完成，耗时 {time.time()-t_start:.2f}s，最低能量: {energy:.4f}")
 
-    # 应用最佳位姿进行演示
-    planner.set_hand_pose(best_pose)
+    # # 应用最佳位姿进行演示
+    # planner.set_hand_pose(best_pose)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
+        # 记录一个标志位，防止在一瞬间（time=0时）重复触发多次规划
+        has_planned_this_reset = False
+
         print("展示最佳采样位姿 (静态)。")
         while viewer.is_running():
-            # 这里只做静态展示，不运行物理步进，防止物体掉落
+            step_start = time.time()
+
+            # 检测 Reset 信号
+            if data.time < 1e-4: # 当点击 Reset 时，time 会变成 0
+                print("检测到重置，正在重新生成位姿...")
+                if not has_planned_this_reset:
+                    generate_new_grasp(planner, initial_guess)
+                    has_planned_this_reset = True
+                    data.time = 0.0001
+            else:
+                # 当时间开始流动（哪怕只有一点点），重置标志位
+                has_planned_this_reset = False
+
+            # 保持静态显示。如果你想看“抓取动作”，这里可以运行 mj_step
+            mujoco.mj_step(model, data) #已在scene_left.xml中将gravity设置为0
+            
             viewer.sync()
-            time.sleep(0.02)
+            time.sleep(0.1)
+            
+            # 维持循环频率
+            time_until_next_step = model.opt.timestep - (time.time() - step_start)
+            if time_until_next_step > 0:
+                time.sleep(time_until_next_step)
 
 except Exception as e:
     import traceback
