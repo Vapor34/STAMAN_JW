@@ -16,7 +16,7 @@
       markrgb="0.8 0.8 0.8" width="300" height="300"/>
     <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
   
-    <mesh name="bottle_mesh" file="bottle.obj" scale="0.2 0.2 0.2"/>
+    <mesh name="bottle_mesh" file="bottle.obj" scale="0.15 0.15 0.15"/>
   </asset>
 
   <worldbody>
@@ -25,7 +25,7 @@
     <geom name="floor" pos="0 0 -0.1" size="0 0 0.05" type="plane" material="groundplane"/>
 
 
-    <body name="bottle_body" pos="0.4 0.4 0.1">
+    <body name="bottle_body" pos="0.4 0.4 0.05">
       <geom name="bottle_geom" type="mesh" mesh="bottle_mesh" rgba="0.7 0.5 0.3 1" group="0"/>
       <freejoint/>
     </body>

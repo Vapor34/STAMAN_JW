@@ -18,23 +18,64 @@ def get_synergy_mapping(model, hand_prefix):
         jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
         if jnt_name and hand_prefix in jnt_name and model.jnt_type[i] != mujoco.mjtJoint.mjJNT_FREE:
             qpos_adr = model.jnt_qposadr[i]
-            
-            # 根据 Shadow Hand 标准命名规则分类 (根据你的实际XML修改)
-            # J1, J2 是远端弯曲关节
-            # J3 是掌指关节弯曲 (Knuckle Flexion) - 主要抓握动力
-            # J4 是掌指关节侧摆 (Knuckle Abduction/Spread)
-            # TH (大拇指) 通常有5个关节
-            
-            # 简化的启发式分类：
             jnt_name_lower = jnt_name.lower()
-            if 'th' in jnt_name_lower: # 大拇指特殊处理
+            if 'th' in jnt_name_lower: 
                 thumb_indices.append(qpos_adr)
-            elif 'j4' in jnt_name_lower or 'abd' in jnt_name_lower: # 侧摆
+            elif 'j4' in jnt_name_lower or 'abd' in jnt_name_lower:
                 abd_indices.append(qpos_adr)
-            else: # 其他都算弯曲 (J1, J2, J3)
+            else:
                 flex_indices.append(qpos_adr)
-                
     return flex_indices, abd_indices, thumb_indices
+
+def qpos_to_ctrl(model, data, planner, target_pose):
+    """
+    将规划出的 9维 状态向量转换为具体的电机控制信号 (ctrl)。
+    假设 XML 中的 Actuator 是 Position 类型 (servo)。
+    """
+    ctrl_cmd = np.zeros(model.nu)
+    
+    # 解析 target_pose
+    grasp_synergy = np.clip(target_pose[7], 0.0, 1.0)
+    spread_synergy = np.clip(target_pose[8], -0.2, 0.3)
+    
+    # 稍微增加一点抓握力度 (Over-closing)，确保抓紧
+    # 比如规划出 0.8，我们命令电机去 0.9，利用物理接触停在表面
+    grasp_synergy_cmd = min(grasp_synergy * 1.1, 1.0) 
+
+    # 遍历所有 Actuator
+    for i in range(model.nu):
+        act_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
+        if not act_name: continue
+        
+        # 找到该 Actuator 对应的 Joint
+        # (MuJoCo 中 actuator 对应的关节 ID 存储在 trnid 中)
+        jnt_id = model.actuator_trnid[i, 0] 
+        jnt_qpos_adr = model.jnt_qposadr[jnt_id]
+        
+        # 判断这个关节属于哪类
+        target_angle = 0.0
+        
+        if jnt_qpos_adr in planner.thumb_adrs:
+            # 大拇指
+            # 这里需要根据你的 synergy 逻辑反推角度
+            # 简单起见，假设大拇指最大弯曲 1.2 rad
+            target_angle = grasp_synergy_cmd * 1.2
+            if "thdistal" in act_name.lower() or "thmiddle" in act_name.lower():
+                 target_angle *= 1.2 # 指尖弯多点
+            
+        elif jnt_qpos_adr in planner.abd_adrs:
+            # 侧摆
+            target_angle = spread_synergy
+            
+        elif jnt_qpos_adr in planner.flex_adrs:
+            # 四指弯曲
+            # 同样假设最大弯曲 1.5 rad
+            target_angle = grasp_synergy_cmd * 1.5
+            
+        # 赋值给 ctrl
+        ctrl_cmd[i] = target_angle
+        
+    return ctrl_cmd
 
 class GraspPlanner(Annealer):
     def __init__(self, state, model, data, bottle_body_name, hand_body_prefix='lh_'):
@@ -84,8 +125,8 @@ class GraspPlanner(Annealer):
         mujoco.mj_resetData(self.model, self.data)
         # 1. 设置手掌
         self.data.qpos[0:7] = state[0:7]
-        # 2. 固定瓶子
-        self.data.qpos[self.bottle_qpos_adr : self.bottle_qpos_adr + 7] = self.target_bottle_pos
+        # # 2. 固定瓶子
+        # self.data.qpos[self.bottle_qpos_adr : self.bottle_qpos_adr + 7] = self.target_bottle_pos
         # --- 修改部分：应用协同控制 ---
         # state[7] 控制抓握力度 (0~1)
         grasp_synergy = np.clip(state[7], 0.0, 1.0)
@@ -118,6 +159,7 @@ class GraspPlanner(Annealer):
 
         mujoco.mj_forward(self.model, self.data)
 
+    #指尖到瓶子距离之和
     def calculate_distance_to_bottle(self):
         bottle_pos = self.data.xpos[self.bottle_body_id]
         total_dist = 0
@@ -140,7 +182,7 @@ class GraspPlanner(Annealer):
     def move(self):
         """ 启发式扰动：加入向瓶子靠近的‘引力’ """
         # 50% 概率进行随机探索，50% 概率进行启发式靠近
-        if np.random.random() > 0.5:
+        if np.random.random() > 0.6:
             # 随机探索 (维持现状)
             self.state[0:3] += np.random.normal(0, 0.02, 3)
         else:
@@ -149,7 +191,7 @@ class GraspPlanner(Annealer):
             palm_pos = self.state[0:3]
             direction = bottle_pos - palm_pos
             # 挪动步长 1cm
-            self.state[0:3] += (direction / (np.linalg.norm(direction) + 1e-6)) * 0.01
+            self.state[0:3] += (direction / (np.linalg.norm(direction) + 1e-6)) * 0.001
 
         # 旋转扰动 (微调)
         self.state[3:7] += np.random.normal(0, 0.1, 4)
@@ -165,7 +207,7 @@ class GraspPlanner(Annealer):
 
         # 扰动张开协同 (state[8])
         self.state[8] += np.random.normal(0, 0.05)
-        self.state[8] = np.clip(self.state[8], -0.2, 0.2)
+        self.state[8] = np.clip(self.state[8], 0, 0.2)
 
     def energy(self):
         self.set_hand_pose(self.state)
@@ -179,8 +221,11 @@ class GraspPlanner(Annealer):
 
         # 2. 朝向项 (手心对准瓶子)
         rot_mat = self.data.xmat[self.palm_body_id].reshape(3, 3)
-        palm_forward = -rot_mat[:, 1] # 假设 Z 轴是手心
-        vec_to_bottle = bottle_pos - self.data.xpos[self.palm_body_id]
+        palm_forward = -rot_mat[:, 1] # -Y轴是手心
+        #lh_palm实际上处于掌根位置，palm_central记录实际掌心位置用于计算
+        palm_central = self.data.xpos[self.palm_body_id]
+        palm_central[1] = palm_central[1] - 0.03
+        vec_to_bottle = bottle_pos - palm_central
         vec_to_bottle /= np.linalg.norm(vec_to_bottle)
         orient_score = (1.0 - np.dot(palm_forward, vec_to_bottle)) * 2.0
 
@@ -200,12 +245,12 @@ class GraspPlanner(Annealer):
             con = self.data.contact[i]
             if (con.geom1 in self.bottle_geom_ids or con.geom2 in self.bottle_geom_ids) and \
                (con.geom1 in self.hand_geom_ids or con.geom2 in self.hand_geom_ids):
-                if con.dist < -0.002: # 允许 2mm 接触
+                if con.dist < 0.002: #  2mm Safety margin
                     collision_penalty = 50.0
 
         return dist_score + orient_score + pose_energy + collision_penalty
 
-def generate_new_grasp(planner, default_guess):
+def generate_new_grasp(model, data, planner, default_guess):
     """
     重采样逻辑：
     1. 给初始猜测加随机偏移（确保多样性）
@@ -227,13 +272,13 @@ def generate_new_grasp(planner, default_guess):
     # 1. 设置 qpos (位置)
     planner.set_hand_pose(best_pose)
     
-    apply_control_to_all(planner, best_pose)
+    apply_control_to_all(model, data, planner, best_pose)
 
     print(f"[完成] 新位姿能量值: {energy:.4f}")
 
     data.qpos[0:7] = best_pose[0:7]
 
-def apply_control_to_all(planner, best_pose):
+def apply_control_to_all(model, data, planner, best_pose):
     # 提取协同变量
     grasp_val = np.clip(best_pose[7], 0.0, 1.0)
     spread_val = np.clip(best_pose[8], -0.2, 0.3)
@@ -263,73 +308,99 @@ def apply_control_to_all(planner, best_pose):
             data.ctrl[i] = grasp_val * 1.5
 
 # --- 主程序 ---
-try:
-    model_path = 'shadow_hand/scene_left.xml'
-    model = mujoco.MjModel.from_xml_path(model_path)
+
+def main():
+    model_path = 'shadow_hand/scene_left.xml' # 请确保路径正确
+    try:
+        model = mujoco.MjModel.from_xml_path(model_path)
+    except:
+        print("未找到模型文件，请检查路径。")
+        return
+        
     data = mujoco.MjData(model)
 
-    # 计算 fingers joints 数量
-    actual_finger_joints = model.nq - 14 
-    
-
-    # 现在的状态向量：7位手掌位姿 + 2位协同变量 = 9位
+    # 1. 初始化规划器
     initial_guess = np.zeros(9)
-
-    # 手掌初始位置 (在瓶子上方)
-    initial_guess[0:3] = [0.4, 0.4, 0.25] 
-    initial_guess[3] = 1.0 # 初始旋转
-
-    # 手指初始姿态：半张开 (协同值为 0.3)
-    initial_guess[7] = 0.3 # Grasp synergy
-    initial_guess[8] = 0.0 # Spread synergy
-
+    initial_guess[0:3] = [0.4, 0.4, 0.3] # 起始高一点
+    initial_guess[3] = 1.0 
+    initial_guess[7] = 0.5 # 初始半握
+    
     planner = GraspPlanner(initial_guess, model, data, bottle_body_name='bottle_body')
     
-    # 关键：足够的步数让退火算法寻优
-    print("开始模拟退火规划，请耐心等待...")
-    planner.steps = 2000 # 建议至少 2000-5000
-    planner.Tmax = 10.0
-    planner.Tmin = 0.01
-    
-    # t_start = time.time()
-    # best_pose, energy = planner.anneal()
-    # print(f"规划完成，耗时 {time.time()-t_start:.2f}s，最低能量: {energy:.4f}")
-
-    # # 应用最佳位姿进行演示
-    # planner.set_hand_pose(best_pose)
+    # 用于存储当前的控制目标
+    current_ctrl_target = np.zeros(model.nu)
+    # 用于存储目标手掌位置（浮动基座）
+    target_palm_pos = initial_guess[0:3].copy()
+    target_palm_quat = initial_guess[3:7].copy()
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        # 记录一个标志位，防止在一瞬间（time=0时）重复触发多次规划
-        has_planned_this_reset = False
-
-        print("展示最佳采样位姿 (静态)。")
+        print(">>> 准备就绪。请按空格键开始(如果viewer支持) 或 等待自动开始...")
+        
+        # 标志位
+        planning_done = False
+        
         while viewer.is_running():
             step_start = time.time()
 
-            # 检测 Reset 信号
-            if data.time < 1e-4: # 当点击 Reset 时，time 会变成 0
-                print("检测到重置，正在重新生成位姿...")
-                if not has_planned_this_reset:
-                    generate_new_grasp(planner, initial_guess)
-                    has_planned_this_reset = True
-                    data.time = 0.0001
-            else:
-                # 当时间开始流动（哪怕只有一点点），重置标志位
-                has_planned_this_reset = False
-
-
-            # 保持静态显示。如果你想看“抓取动作”，这里可以运行 mj_step
-            mujoco.mj_step(model, data) #已在scene_left.xml中将gravity设置为0
+            # --- 状态机逻辑 ---
             
+            # 阶段 A: 如果刚重置 (time close to 0)，执行规划
+            if data.time < 0.002:
+                print(">>> [规划阶段] 正在计算最佳抓取位姿 (模拟退火)...")
+                # 恢复初始猜测
+                planner.state = initial_guess.copy()
+                # 运行退火 (纯计算，不渲染)
+                best_pose, energy = planner.anneal()
+                print(f">>> [规划完成] 能量: {energy:.4f}")
+                print(f"    目标协同值: {best_pose[7]:.2f}")
+                
+                # 计算出这个 pose 对应的电机指令
+                current_ctrl_target = qpos_to_ctrl(model, data, planner, best_pose)
+                target_palm_pos = best_pose[0:3]
+                target_palm_quat = best_pose[3:7]
+                
+                # 策略选择：
+                # 选项1 (瞬移)：直接把手设置过去 (用于调试规划结果)
+                # planner.set_hand_pose(best_pose) 
+                # data.qpos[0:7] = best_pose[0:7] # 浮动基座瞬移
+                
+                # 选项2 (控制)：把手瞬移到目标位置，但手指张开，然后慢慢合拢 (更真实)
+                # 这里我们简化：先瞬移基座到目标位置，然后通过 ctrl 驱动手指
+                data.qpos[0:3] = target_palm_pos
+                data.qpos[3:7] = target_palm_quat
+                
+                # 必须调用 forward 更新瞬移后的几何
+                mujoco.mj_forward(model, data) 
+                
+                planning_done = True
+
+            # 阶段 B: 物理执行循环
+            if planning_done:
+                # 1. 应用手指控制信号
+                # Shadow Hand 的 XML 通常是 Position Control
+                # data.ctrl[:] = current_ctrl_target 
+                # 为了防止某个电机报错，逐个赋值更安全
+                for i in range(len(current_ctrl_target)):
+                    data.ctrl[i] = current_ctrl_target[i]
+
+                # 2. 浮动基座控制 (如果不固定手腕)
+                # 如果你的 scene_left.xml 里手腕是 free joint，它会掉下来。
+                # 你需要把 data.qpos[0:7] 锁死在规划的位置，或者添加 mocap body 绑定。
+                # 这里最简单的做法是：每一帧都强制重置基座位置 (即“钉在空中”)
+                data.qpos[0:3] = target_palm_pos
+                data.qpos[3:7] = target_palm_quat
+                # 注意：强行修改 qpos 会消除基座的速度，这虽然不物理，但能让手悬空。
+                # 更好的做法是在 XML 里把手腕设为 mocap body。
+
+                # 3. 物理步进
+                mujoco.mj_step(model, data)
+
             viewer.sync()
-            time.sleep(0.1)
-            
-            # 维持循环频率
+
+            # 帧率控制
             time_until_next_step = model.opt.timestep - (time.time() - step_start)
             if time_until_next_step > 0:
                 time.sleep(time_until_next_step)
 
-except Exception as e:
-    import traceback
-    traceback.print_exc()
-    print(f"发生错误：{e}")
+if __name__ == "__main__":
+    main()
