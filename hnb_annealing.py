@@ -58,8 +58,8 @@ def qpos_to_ctrl(model, data, planner, target_pose):
         if jnt_qpos_adr in planner.thumb_adrs:
             # 大拇指
             # 这里需要根据你的 synergy 逻辑反推角度
-            # 简单起见，假设大拇指最大弯曲 1.2 rad
-            target_angle = grasp_synergy_cmd * 1.2
+            # 简单起见，假设大拇指最大弯曲 1.5 rad
+            target_angle = grasp_synergy_cmd * 1.5
             if "thdistal" in act_name.lower() or "thmiddle" in act_name.lower():
                  target_angle *= 1.2 # 指尖弯多点
             
@@ -69,8 +69,8 @@ def qpos_to_ctrl(model, data, planner, target_pose):
             
         elif jnt_qpos_adr in planner.flex_adrs:
             # 四指弯曲
-            # 同样假设最大弯曲 1.5 rad
-            target_angle = grasp_synergy_cmd * 1.5
+            # 同样假设最大弯曲 1.8 rad
+            target_angle = grasp_synergy_cmd * 1.8
             
         # 赋值给 ctrl
         ctrl_cmd[i] = target_angle
@@ -250,62 +250,62 @@ class GraspPlanner(Annealer):
 
         return dist_score + orient_score + pose_energy + collision_penalty
 
-def generate_new_grasp(model, data, planner, default_guess):
-    """
-    重采样逻辑：
-    1. 给初始猜测加随机偏移（确保多样性）
-    2. 运行退火算法
-    3. 将结果写入 data.qpos
-    """
-    print("\n 正在检测到重置，生成新的随机位姿...")
+# def generate_new_grasp(model, data, planner, default_guess):
+#     """
+#     重采样逻辑：
+#     1. 给初始猜测加随机偏移（确保多样性）
+#     2. 运行退火算法
+#     3. 将结果写入 data.qpos
+#     """
+#     print("\n 正在检测到重置，生成新的随机位姿...")
     
-    # 随机化起点：手掌位置在瓶子上方 10cm 范围内随机漂移
-    random_guess = default_guess.copy()
-    random_guess[0:3] += np.random.uniform(-0.08, 0.08, 3) 
-    # 随机化初始协同张开度
-    random_guess[7] = np.random.uniform(0.1, 0.5) 
+#     # 随机化起点：手掌位置在瓶子上方 10cm 范围内随机漂移
+#     random_guess = default_guess.copy()
+#     random_guess[0:3] += np.random.uniform(-0.08, 0.08, 3) 
+#     # 随机化初始协同张开度
+#     random_guess[7] = np.random.uniform(0.1, 0.5) 
     
-    planner.state = random_guess
-    best_pose, energy = planner.anneal()
+#     planner.state = random_guess
+#     best_pose, energy = planner.anneal()
     
-    # 将规划好的位姿写入 MuJoCo 内存
-    # 1. 设置 qpos (位置)
-    planner.set_hand_pose(best_pose)
+#     # 将规划好的位姿写入 MuJoCo 内存
+#     # 1. 设置 qpos (位置)
+#     planner.set_hand_pose(best_pose)
     
-    apply_control_to_all(model, data, planner, best_pose)
+#     apply_control_to_all(model, data, planner, best_pose)
 
-    print(f"[完成] 新位姿能量值: {energy:.4f}")
+#     print(f"[完成] 新位姿能量值: {energy:.4f}")
 
-    data.qpos[0:7] = best_pose[0:7]
+#     data.qpos[0:7] = best_pose[0:7]
 
-def apply_control_to_all(model, data, planner, best_pose):
-    # 提取协同变量
-    grasp_val = np.clip(best_pose[7], 0.0, 1.0)
-    spread_val = np.clip(best_pose[8], -0.2, 0.3)
+# def apply_control_to_all(model, data, planner, best_pose):
+#     # 提取协同变量
+#     grasp_val = np.clip(best_pose[7], 0.0, 1.0)
+#     spread_val = np.clip(best_pose[8], -0.2, 0.3)
     
-    n_act = model.nu # 执行器总数
-    for i in range(n_act):
-        act_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
-        if not act_name: continue
+#     n_act = model.nu # 执行器总数
+#     for i in range(n_act):
+#         act_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
+#         if not act_name: continue
         
-        name_lower = act_name.lower()
-        # 1. 处理手腕 (Wrist) - 保持固定或设定特定角度
-        if 'wr' in name_lower or 'wrist' in name_lower:
-            # 这里的控制值应对应 best_pose 中规划的手腕角度
-            # 如果没规划，通常设为 0
-            data.ctrl[i] = 0.0 
+#         name_lower = act_name.lower()
+#         # 1. 处理手腕 (Wrist) - 保持固定或设定特定角度
+#         if 'wr' in name_lower or 'wrist' in name_lower:
+#             # 这里的控制值应对应 best_pose 中规划的手腕角度
+#             # 如果没规划，通常设为 0
+#             data.ctrl[i] = 0.0 
             
-        # 2. 处理大拇指 (Thumb)
-        elif 'th' in name_lower:
-            data.ctrl[i] = grasp_val * 1.2
+#         # 2. 处理大拇指 (Thumb)
+#         elif 'th' in name_lower:
+#             data.ctrl[i] = grasp_val * 1.2
             
-        # 3. 处理手指侧摆 (Spread/Abduction)
-        elif 'j4' in name_lower or 'abd' in name_lower:
-            data.ctrl[i] = spread_val
+#         # 3. 处理手指侧摆 (Spread/Abduction)
+#         elif 'j4' in name_lower or 'abd' in name_lower:
+#             data.ctrl[i] = spread_val
             
-        # 4. 处理手指弯曲 (Flexion)
-        else:
-            data.ctrl[i] = grasp_val * 1.5
+#         # 4. 处理手指弯曲 (Flexion)
+#         else:
+#             data.ctrl[i] = grasp_val * 1.5
 
 # --- 主程序 ---
 
@@ -326,7 +326,8 @@ def main():
     initial_guess[7] = 0.5 # 初始半握
     
     planner = GraspPlanner(initial_guess, model, data, bottle_body_name='bottle_body')
-    
+    planner.steps = 2000
+
     # 用于存储当前的控制目标
     current_ctrl_target = np.zeros(model.nu)
     # 用于存储目标手掌位置（浮动基座）
