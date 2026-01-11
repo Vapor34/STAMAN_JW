@@ -25,4 +25,4 @@ Planning2
 https://github.com/Vapor34/STAMAN_JW/blob/main/test_videos/target2.webm
 
 Sim Annealing(Grasp Planning)
-![Sim Annealing](/test_videos/annealing.gif)
+![Sim Annealing](/test_videos/annealing_init.gif)
