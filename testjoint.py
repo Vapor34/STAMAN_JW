@@ -17,5 +17,9 @@ for i in range(model.njnt):
     jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
     print(jnt_name)
 
-for j in len(data.qpos()):
-    print(data.qpos(j))
+for i in range(model.nbody):
+    body_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, i)
+    print(body_name)
+
+palm_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "lh_palm")
+print(f"palm body id: {palm_body_id}")

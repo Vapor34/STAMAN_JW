@@ -1,3 +1,15 @@
+"""
+尝试修改：
+    1. 手瞬移到指定位置时，五指会抽动，有可能弹飞水瓶。
+    2. 指关节弯曲时部分关节不弯曲（推测get_synergy_mapping或energy有问题），似乎只有近端关节弯曲。 
+改动部分：
+    1. get_synergy_mapping
+    2. qpos_to_ctrl
+    3. 新增 quaternion_slerp 
+    4. main
+
+"""
+
 import mujoco
 import mujoco.viewer
 import numpy as np
@@ -5,6 +17,8 @@ import time
 from simanneal import Annealer
 
 # --- 辅助函数 ---
+
+
 
 def get_synergy_mapping(model, hand_prefix):
     """
@@ -21,64 +35,101 @@ def get_synergy_mapping(model, hand_prefix):
 
     for i in range(model.njnt):
         jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
-        # 排除 free joint 和不包含前缀的关节
-        if jnt_name and hand_prefix in jnt_name and model.jnt_type[i] != mujoco.mjtJoint.mjJNT_FREE:
+        if jnt_name and hand_prefix in jnt_name and model.jnt_type[i] != mujoco.mjtJoint.mjJNT_FREE and "lh_WR" not in jnt_name:
             qpos_adr = model.jnt_qposadr[i]
             jnt_name_lower = jnt_name.lower()
+            
+            # Shadow Hand 命名惯例处理
+            # th = 大拇指
+            # j4 或 abd = 侧摆/张开
+            # j1, j2, j3 = 弯曲 (无论顺序如何，都归类为 flex)
             
             if 'th' in jnt_name_lower: 
                 thumb_indices.append(qpos_adr)
             elif 'j4' in jnt_name_lower or 'abd' in jnt_name_lower:
                 abd_indices.append(qpos_adr)
+            elif any(x in jnt_name_lower for x in ['j1', 'j2', 'j3', 'flex']):
+                flex_indices.append(qpos_adr)
             else:
+                # 兜底：如果有关节没被上述规则捕获，默认归为弯曲
                 flex_indices.append(qpos_adr)
                 
     return flex_indices, abd_indices, thumb_indices
 
 def qpos_to_ctrl(model, planner, target_pose):
-    """
-    将规划出的状态 (synergy值) 转换为电机控制信号 (ctrl)。
-    包含 Force Closure 策略：让控制目标比规划目标稍大，以产生握力。
-    """
-    ctrl_cmd = np.zeros(model.nu) #model.nu 是 actuator 数量
+    ctrl_cmd = np.zeros(model.nu)
     
-    # 解析 target_pose (来自规划器的输出)
-    grasp_synergy = np.clip(target_pose[7], 0.0, 1.0)
-    spread_synergy = np.clip(target_pose[8], -0.2, 0.3)
-    
-    # 策略：Over-closing (过关闭)。
-    # 规划时假设抓到 1.0 的位置刚好接触，控制时命令电机去 1.1 的位置，
-    # 这样物理引擎会计算出接触力。
-    grasp_synergy_cmd = min(grasp_synergy * 1.1, 1.0) 
+    # 归一化的控制信号 (0.0 ~ 1.0)
+    grasp_val = np.clip(target_pose[7], 0.0, 1.0)
+    # 侧摆信号，通常需要映射到 -1 ~ 1 或特定角度，这里假设输入是归一化意图
+    spread_val = np.clip(target_pose[8], -1.0, 1.0) 
 
     for i in range(model.nu):
-        act_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
-        if not act_name: continue
+        jnt_id = model.actuator_trnid[i, 0]
+        jnt_adr = model.jnt_qposadr[jnt_id]
         
-        # 通过 actuator 找到对应的 joint
-        jnt_id = model.actuator_trnid[i, 0] 
-        jnt_qpos_adr = model.jnt_qposadr[jnt_id]
+        # 获取该执行器的物理控制范围 (例如: [-0.3, 0.3] 或 [0, 1.57])
+        min_ctrl, max_ctrl = model.actuator_ctrlrange[i]
+        ctrl_span = max_ctrl - min_ctrl
         
-        target_angle = 0.0
+        val = 0.0
         
-        # 根据关节类型分配角度
-        if jnt_qpos_adr in planner.thumb_adrs:
-            # 大拇指：基础弯曲 + 指尖增强
-            target_angle = grasp_synergy_cmd * 1.2
-            if "thdistal" in act_name.lower() or "thmiddle" in act_name.lower():
-                 target_angle *= 1.2 
+        if jnt_adr in planner.flex_adrs:
+            # 弯曲：将 0~1 映射到 min~max
+            # 注意：grasp_val ** 1.5 让小数值弯曲更慢（非线性），看起来更自然
+            ratio = grasp_val ** 1.2 
+            val = min_ctrl + ratio * ctrl_span
             
-        elif jnt_qpos_adr in planner.abd_adrs:
-            # 侧摆
-            target_angle = spread_synergy
+        elif jnt_adr in planner.thumb_adrs:
+            # 大拇指：同理
+            ratio = grasp_val 
+            val = min_ctrl + ratio * ctrl_span
             
-        elif jnt_qpos_adr in planner.flex_adrs:
-            # 四指弯曲：设定较大的最大弯曲角以确保握紧
-            target_angle = grasp_synergy_cmd * 1.6 
+        elif jnt_adr in planner.abd_adrs:
+            # 侧摆：假设 spread_val 在 -1(闭合) 到 1(张开) 之间
+            # 我们将其映射到 ctrl 范围的中心向两边扩展
+            mid = (max_ctrl + min_ctrl) / 2
+            half_span = ctrl_span / 2
+            val = mid + spread_val * half_span
             
-        ctrl_cmd[i] = target_angle
+        else:
+            # 其他关节（如手腕）保持原位或归零
+            val = 0.0 # 或者保持当前状态
+            
+        ctrl_cmd[i] = np.clip(val, min_ctrl, max_ctrl)
         
     return ctrl_cmd
+
+def quaternion_slerp(q0, q1, t):
+    """简单的四元数球面插值"""
+    # 归一化
+    q0 = q0 / np.linalg.norm(q0)
+    q1 = q1 / np.linalg.norm(q1)
+    dot = np.dot(q0, q1)
+
+    if dot < 0.0:
+        q1 = -q1
+        dot = -dot
+
+    if dot > 0.9995:
+        return (1.0 - t) * q0 + t * q1
+
+    theta_0 = np.arccos(dot)
+    sin_theta_0 = np.sin(theta_0)
+    theta = theta_0 * t
+    sin_theta = np.sin(theta)
+    
+    s0 = np.cos(theta) - dot * sin_theta / sin_theta_0
+    s1 = sin_theta / sin_theta_0
+    return s0 * q0 + s1 * q1
+
+
+
+
+
+
+
+
 
 # --- 规划器类 ---
 
@@ -168,7 +219,7 @@ class GraspPlanner(Annealer):
         else:
             # 启发式：移向瓶子
             bottle_pos = self.data.xpos[self.bottle_body_id] # 获取当前瓶子位置
-            palm_pos = self.state[0:3]
+            palm_pos = self.data.xpos[self.palm_body_id]
             direction = bottle_pos - palm_pos
             dist = np.linalg.norm(direction)
             if dist > 1e-6:
@@ -219,7 +270,7 @@ class GraspPlanner(Annealer):
         orient_energy = (1.0 - alignment) * 1.5 
 
         # --- 3. 姿态先验 (Pose Energy) ---
-        pose_energy = np.square(self.state[7] - 0.35) * 2.0
+        pose_energy = np.square(self.state[7] - 0.35) 
 
         # --- 4. 碰撞惩罚 (Collision Penalty) ---
         collision_penalty = 0
@@ -230,11 +281,11 @@ class GraspPlanner(Annealer):
             
             if is_bottle and is_hand:
                 # 稍微允许一点负距离 (穿模) 以确保紧密接触，但超过一定阈值则重罚
-                if con.dist < -0.005: 
+                if con.dist < -0.00: 
                     collision_penalty += 100.0
                 else:
                     # 奖励轻微的接触 (可选，如果希望手主动去贴合)
-                    collision_penalty -= 0.001 
+                    collision_penalty -= 0.01 
 
         # 权重系数调整：由于现在计算的点多了，avg_dist 可能会比只算指尖大一些或者小一些，
         # 建议适当增加距离项的权重，让手更贴近物体。
@@ -250,96 +301,118 @@ def main():
     except Exception as e:
         print(f"Error loading model: {e}")
         return
-        
     data = mujoco.MjData(model)
 
-    # 1. 初始猜测状态 [x, y, z, qw, qx, qy, qz, grasp_syn, spread_syn]
+    # 初始状态
     initial_guess = np.zeros(9)
-    # 假设瓶子在 0.4, 0.4，手初始在上方
     initial_guess[0:3] = [0.4, 0.4, 0.3] 
-    initial_guess[3] = 1.0 # w=1 (无旋转)
-    initial_guess[7] = 0.5 # 初始协同值
+    initial_guess[3] = 1.0 
+    initial_guess[7] = 0.0 # 初始完全张开
 
     planner = GraspPlanner(initial_guess, model, data, bottle_body_name='bottle_body')
-    
-    # 2. 退火参数设置
-    planner.steps = 2500     # 迭代次数
-    planner.Tmax = 20.0      # 初始温度
-    planner.Tmin = 0.001     # 结束温度
+    planner.steps = 2500
 
-    # 3. 运行时变量
-    current_ctrl_target = np.zeros(model.nu)
-    target_palm_pos = initial_guess[0:3].copy()
-    target_palm_quat = initial_guess[3:7].copy()
+    # 状态标志
+    planning_done = False
     
-    planning_done = False # 标志位：是否已完成规划
+    # 记录目标参数
+    target_palm_pos = np.zeros(3)
+    target_palm_quat = np.zeros(4)
+    final_grasp_synergy = 0.0 
+    final_spread_synergy = 0.0
+    
+    execution_start_time = 0.0
 
     print(">>> 启动 MuJoCo 查看器...")
-    print(">>> 点击 Viewer 的 'Reset' 按钮将触发新的抓取规划。")
-
+    
     with mujoco.viewer.launch_passive(model, data) as viewer:
         while viewer.is_running():
             step_start = time.time()
 
-            # --- 逻辑控制 ---
-            
-            # A. 检测 Reset 信号 (time 归零) -> 触发规划
-            if data.time < 0.002:
-                print("\n[状态]开始规划...")
+            # --- 阶段 1: 规划与瞬移 ---
+            # 使用 planning_done 标志位来防止无限循环，因为 set_hand_pose 会重置 time
+            if not planning_done:
+                print("\n[状态] 正在规划最佳抓取点...")
                 
-                # 1. 稍微随机化初始点，避免每次结果完全一样
-                random_start = initial_guess.copy()
-                random_start[0:3] += np.random.uniform(-0.05, 0.05, 3)
-                planner.state = random_start
-                
-                # 2. 运行模拟退火 (阻塞式计算，此时 Viewer 会卡顿一下)
-                t0 = time.time()
+                # 1. 运行退火算法寻找最佳点
+                planner.state = initial_guess.copy()
                 best_pose, energy = planner.anneal()
-                print(f"[结果] 规划耗时 {time.time()-t0:.2f}s, 能量: {energy:.4f}")
-                print(f"[目标] Grasp Synergy: {best_pose[7]:.2f}")
+                
+                print(f"[完成] 瞬移目标 Grasp: {best_pose[7]:.2f}")
 
-                # 3. 将规划结果转换为控制指令
-                # 此时我们只更新"目标变量"，不直接改写 data.qpos (除非为了瞬移调试)
-                current_ctrl_target = qpos_to_ctrl(model, planner, best_pose)
+                # 2. 准备瞬移数据
+                # 构造一个“张开手”的姿态，但位置在目标点
+                teleport_pose = best_pose.copy()
+                teleport_pose[7] = 0.0  # 强制手指张开 (Grasp = 0)
+                teleport_pose[8] = 0.0  # 强制手指居中 (Spread = 0)
+                
+                # 3. 执行瞬移 (使用 planner 的辅助函数)
+                # 这会调用 mj_resetData，清除所有速度(qvel)和加速度，
+                # 确保手是“静止”出现在目标点的，没有任何惯性。
+                planner.set_hand_pose(teleport_pose)
+                
+                # 保存后续抓取需要的目标参数
                 target_palm_pos = best_pose[0:3]
                 target_palm_quat = best_pose[3:7]
-
-                # 4. 可选：规划完成后，立刻将手“瞬移”到目标位置附近，方便观察
-                # 这样可以避免手从很远的地方飞过来撞翻瓶子
-                data.qpos[0:3] = target_palm_pos
-                data.qpos[3:7] = target_palm_quat
-                # 手指也先瞬移到半张开状态 (避免鬼畜)
-                mujoco.mj_forward(model, data) # 刷新几何
-
+                final_grasp_synergy = best_pose[7]  # 这是规划出的最终握力
+                final_spread_synergy = best_pose[8]
+                
+                # 标记规划完成，重置时间
                 planning_done = True
+                execution_start_time = time.time()
                 
-                # 防止循环重复触发，手动推进一点时间
-                if data.time == 0:
-                    data.time = 0.0001
+                # 由于 set_hand_pose 重置了仿真时间，我们需要确保 viewer 同步
+                viewer.sync()
+                continue # 跳过这一帧，让物理引擎在新位置初始化
 
-            # B. 物理模拟循环
+            # --- 阶段 2: 锁定基座 & 执行抓取 ---
             if planning_done:
-                # 1. 手指控制: 使用计算好的 Force Closure 角度
-                # 确保每个 actuator 都被赋值
-                if len(current_ctrl_target) == model.nu:
-                    data.ctrl[:] = current_ctrl_target
-                
-                # 2. 手腕控制 (Floating Base Fixed)
-                # 因为没有机械臂，我们需要把手掌的 6DoF 基座“钉”在规划好的空中位置
-                # 这种方法虽然消除了基座速度，但对于测试抓取是有效的
+                # [关键操作 1]：每帧强制锁定基座位置（钉在空中）
+                # 即使有碰撞反弹，这一步也会强制把手腕拉回目标点
                 data.qpos[0:3] = target_palm_pos
                 data.qpos[3:7] = target_palm_quat
                 
-                # 3. 物理步进 (计算接触力、摩擦力、手指运动)
+                # [关键操作 2]：每帧消除基座速度，防止震荡
+                data.qvel[0:6] = 0.0
+
+                # 动画逻辑：
+                # 0.5秒缓冲 -> 2.0秒抓取
+                anim_time = time.time() - execution_start_time
+                wait_time = 0.5    # 瞬移后停顿 0.5 秒，让人看清
+                grasp_duration = 2.0 # 抓取过程持续 2 秒
+                
+                current_grasp_val = 0.0
+                
+                if anim_time < wait_time:
+                    # 缓冲期：保持张开，不动
+                    current_grasp_val = 0.0
+                else:
+                    # 抓取期：计算进度
+                    grasp_t = (anim_time - wait_time) / grasp_duration
+                    grasp_t = np.clip(grasp_t, 0.0, 1.0)
+                    current_grasp_val = final_grasp_synergy * grasp_t
+
+                # 构造控制指令
+                temp_pose = np.zeros(9)
+                temp_pose[7] = current_grasp_val      # 动态弯曲
+                temp_pose[8] = final_spread_synergy   # 保持规划的侧摆角度
+                
+                # 计算并应用力矩
+                # 注意：这里调用的是上一轮修复过的 qpos_to_ctrl
+                ctrl_cmd = qpos_to_ctrl(model, planner, temp_pose)
+                data.ctrl[:] = ctrl_cmd
+
+                # 物理步进
                 mujoco.mj_step(model, data)
 
-            # C. 渲染同步
             viewer.sync()
-
+            
             # 帧率控制
             time_until_next_step = model.opt.timestep - (time.time() - step_start)
             if time_until_next_step > 0:
                 time.sleep(time_until_next_step)
 
+
 if __name__ == "__main__":
     main()
+
