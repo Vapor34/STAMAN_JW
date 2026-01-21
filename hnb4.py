@@ -99,10 +99,14 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
     
     # 【改进】大幅增加力度系数
     grasp_force_factor = 2.5  # 从 1.8 增加到 2.5（+39%）
+    
+    # 【调试】用于检测是否有控制信号被施加到 J3
+    debug_j3_found = False
 
     for i in range(model.nu):
         jnt_id = model.actuator_trnid[i, 0]
         jnt_adr = model.jnt_qposadr[jnt_id]
+        jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, jnt_id)
         
         # 获取该执行器的物理限制
         ctrl_range = model.actuator_ctrlrange[i]
@@ -111,6 +115,14 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
             # 【改进】最大力度提升到 6.25
             # (grasp_val ** 1.0) * 2.5 * 2.5
             val = (grasp_val ** 1.0) * 2.5 * grasp_force_factor
+            
+            # 【调试】打印 J3 执行器信息
+            if not debug_j3_found and grasp_val > 0.1:  # 仅在有实际控制信号时打印
+                print(f"[DEBUG J3] 执行器 {i}: {jnt_name} (jnt_adr={jnt_adr}), "
+                      f"grasp_val={grasp_val:.3f}, val_raw={val:.3f}, "
+                      f"ctrl_range=[{ctrl_range[0]:.3f}, {ctrl_range[1]:.3f}]")
+                debug_j3_found = True
+                
         elif jnt_adr in planner.thumb_adrs:
             val = grasp_val * 2.2  # 从 1.8 增加到 2.2
         elif jnt_adr in planner.abd_adrs:
@@ -120,6 +132,10 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
             
         # 确保不超出执行器限位
         ctrl_cmd[i] = np.clip(val, ctrl_range[0], ctrl_range[1])
+        
+        # 【调试】打印最终的控制值
+        if jnt_adr in planner.flex_adrs and grasp_val > 0.1:
+            print(f"  → 最终控制值: ctrl_cmd[{i}]={ctrl_cmd[i]:.3f}")
         
     return ctrl_cmd
 
@@ -337,6 +353,9 @@ def main():
                 data.qpos[3:7] = target_palm_quat
                 data.qpos[7] = 0.0  # 手指张开
                 data.qpos[8] = final_spread_synergy
+                
+                # 【重要】不要直接设置手指 qpos，让执行器去控制！
+                # 移除了对 data.qpos 中手指关节的直接设置
 
                 # 1.0s ~ 5.0s：手指闭合
                 grasp_start_time = 1.0
@@ -358,11 +377,6 @@ def main():
                 ctrl_cmd = qpos_to_ctrl_improved(model, planner, temp_pose)
                 data.ctrl[:] = ctrl_cmd
                 
-                # 【新增】调试信息收集（仅在执行阶段）
-                if anim_time > grasp_start_time:
-                    # 获取第一个屈肌关节和第一个侧摆关节
-                    if len(planner.flex_adrs) > 0:
-                        flex_adr = planner.flex_adrs[0]
                 mujoco.mj_step(model, data)
 
             viewer.sync()
