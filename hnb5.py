@@ -136,6 +136,11 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
         # 严格按执行器的 ctrlrange 进行裁剪
         # 位置伺服会将这个值作为目标角度
         ctrl_cmd[i] = np.clip(val, ctrl_range[0], ctrl_range[1])
+
+    ctrl_cmd[9] = 1.0
+    ctrl_cmd[12] = 1.0
+    ctrl_cmd[15] = 1.0
+    ctrl_cmd[19] = 1.0
         
     return ctrl_cmd
 
