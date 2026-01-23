@@ -26,41 +26,32 @@ def get_synergy_mapping(model, hand_prefix):
     abd_indices = [] 
     thumb_indices = []
     
-    # 构建关节名称 → qpos_adr 的映射
     jnt_map = {}
     for i in range(model.njnt):
         jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
         if jnt_name:
             jnt_map[jnt_name] = model.jnt_qposadr[i]
-    
-    print("\n=== 手部关节分类 ===")
-    
+        
     # 【四指弯曲】仅 J3（有执行器的远端关节）
-    print("\n【四指弯曲 - J3 远端关节】:")
     flex_j3_names = ['lh_FFJ3', 'lh_MFJ3', 'lh_RFJ3', 'lh_LFJ3']
     for jnt_name in flex_j3_names:
         if jnt_name in jnt_map:
             qpos_adr = jnt_map[jnt_name]
             flex_indices.append(qpos_adr)
-            print(f"  ✓ {jnt_name:15s} → qpos_adr {qpos_adr}")
     
     # 【侧摆】J4（四指的侧摆关节）
-    print("\n【四指侧摆 - J4 关节】:")
     abd_j4_names = ['lh_FFJ4', 'lh_MFJ4', 'lh_RFJ4', 'lh_LFJ4']
     for jnt_name in abd_j4_names:
         if jnt_name in jnt_map:
             qpos_adr = jnt_map[jnt_name]
             abd_indices.append(qpos_adr)
-            print(f"  ✓ {jnt_name:15s} → qpos_adr {qpos_adr}")
     
     # 【大拇指】所有关节
-    print("\n【大拇指 - 所有关节】:")
     thumb_names = ['lh_THJ1', 'lh_THJ2', 'lh_THJ3', 'lh_THJ4', 'lh_THJ5']
     for jnt_name in thumb_names:
         if jnt_name in jnt_map:
             qpos_adr = jnt_map[jnt_name]
             thumb_indices.append(qpos_adr)
-            print(f"  ✓ {jnt_name:15s} → qpos_adr {qpos_adr}")
     
     # 【被忽略的关节】被动关节（无执行器）
     print("\n【被忽略的关节 - 被动关节（无执行器）】:")
@@ -74,12 +65,21 @@ def get_synergy_mapping(model, hand_prefix):
     for jnt_name in ignored_names:
         if jnt_name in jnt_map:
             qpos_adr = jnt_map[jnt_name]
-            print(f"  ✗ {jnt_name:15s} → qpos_adr {qpos_adr} (被动/不使用)")
     
+    tendon_names = ["lh_FFJ0", "lh_MFJ0", "lh_RFJ0", "lh_LFJ0"]
+    for jnt_name in tendon_names:
+        if jnt_name in jnt_map:
+            qpos_adr = jnt_map[jnt_name]
+            tendon_names.append(qpos_adr)
+    
+    print(tendon_names)
+    exit()
+
+
     print(f"\n总结: flex={len(flex_indices)} J3, abd={len(abd_indices)} J4, thumb={len(thumb_indices)}")
     print("=" * 50)
     
-    return flex_indices, abd_indices, thumb_indices
+    return flex_indices, abd_indices, thumb_indices, tendon_indices
 
 def qpos_to_ctrl_improved(model, planner, target_pose):
     """
@@ -95,8 +95,9 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
     • grasp_val [0,1] 线性映射到 [0, max_angle]
     • 位置伺服自动处理动力学
     """
+    #### grasping encoding: (x y z qw qx qy qz alpha beta) 
     ctrl_cmd = np.zeros(model.nu)
-    grasp_val = np.clip(target_pose[7], 0.0, 1.0)
+    grasp_val = np.clip(target_pose[7], 0.0, 1.0) # tanh sigmoid 归一化函数
     spread_val = np.clip(target_pose[8], -0.2, 0.3)
     
     # 【参数】每类关节的最大控制角度
@@ -411,10 +412,8 @@ def main():
                     spread=target_state.spread
                 )
                 
-                # 使用新的 ctrl 计算函数
-                ctrl_cmd = qpos_to_ctrl_improved(model, planner, exec_state.to_array())
-                data.ctrl = ctrl_cmd
-                
+                # output contro command
+                data.ctrl = qpos_to_ctrl_improved(model, planner, exec_state.to_array())
                 mujoco.mj_step(model, data)
 
             viewer.sync()
