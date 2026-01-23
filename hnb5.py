@@ -62,10 +62,7 @@ def get_synergy_mapping(model, hand_prefix):
                     if jname:
                         jnt_map[jname] = qadr
     
-            
-
-    print(jnt_map)
-    exit()
+        
     # for i in range(model.njnt):
     #     jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
     #     if jnt_name:
