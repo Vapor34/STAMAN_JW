@@ -95,6 +95,8 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
     ctrl_cmd = np.zeros(model.nu)
     grasp_val = np.clip(target_pose[7], 0.0, 1.0) # tanh sigmoid 归一化函数
     spread_val = np.clip(target_pose[8], -0.2, 0.3)
+
+    print(f"======= grasp value: {grasp_val}")
     
     # 【参数】每类关节的最大控制角度
     # 这些值应该在各自的 ctrlrange 范围内
@@ -139,11 +141,6 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
         # 位置伺服会将这个值作为目标角度
         ctrl_cmd[i] = np.clip(val, ctrl_range[0], ctrl_range[1])
 
-    # ctrl_cmd[9] = 1.0
-    # ctrl_cmd[12] = 1.0
-    # ctrl_cmd[15] = 1.0
-    # ctrl_cmd[19] = 1.0
-        
     return ctrl_cmd
 
 # --- 规划器类 ---
