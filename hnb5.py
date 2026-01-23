@@ -135,6 +135,7 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
             pass
             
         else:
+            print(jnt_name)
             val = 0.0
             
         # 严格按执行器的 ctrlrange 进行裁剪
