@@ -43,7 +43,7 @@
           <position ctrlrange="-0.261799 1.5708"/>
         </default>
       </default>
-<!-- metacarpal掌骨  knuckle指关节  proximal近中心的；近端的  middle_distal中间的_远端的-->
+      <!-- metacarpal掌骨  knuckle指关节  proximal近中心的；近端的  middle_distal中间的_远端的-->
       <default class="metacarpal">
         <joint axis="0.573576 0 0.819152" range="0 0.785398"/>
         <position ctrlrange="0 0.785398"/>

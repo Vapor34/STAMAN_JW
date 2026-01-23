@@ -3,13 +3,7 @@ import mujoco.viewer
 import numpy as np
 import time
 from simanneal import Annealer
-
-# class StateStruct:
-#     def __init__(self):
-#         self.data[9]
-#         xxx
-        #   self.quat = [xxx]
-    
+from state_struct import StateStruct
 
 # --- 辅助函数 ---
 
@@ -189,55 +183,81 @@ class GraspPlanner(Annealer):
         num_geoms = self.model.body_geomnum[body_id]
         return [start_geom + j for j in range(num_geoms)]
 
-    def set_hand_pose(self, state):
-        """仅用于能量计算的运动学设置"""
+    def set_hand_pose(self, state_struct):
+        """仅用于能量计算的运动学设置
+        
+        Args:
+            state_struct (StateStruct): 机械手状态结构
+        """
         mujoco.mj_resetData(self.model, self.data)
         
-        self.data.qpos[0:7] = state[0:7]
+        # 设置手掌位置和姿态
+        self.data.qpos[0:3] = state_struct.get_position()
+        self.data.qpos[3:7] = state_struct.get_quaternion()
         
-        grasp_synergy = np.clip(state[7], 0.0, 1.0)
-        spread_synergy = np.clip(state[8], -0.2, 0.3)
+        # 根据协同变量设置手指
+        grasp = state_struct.grasp
+        spread = state_struct.spread
 
-        # 弯曲
-        flex_angle = grasp_synergy * 1.5
+        # 弯曲 (J3)
+        flex_angle = grasp * 1.5
         for adr in self.flex_adrs:
             self.data.qpos[adr] = flex_angle
 
-        # 侧摆
+        # 侧摆 (J4)
         for adr in self.abd_adrs:
-            self.data.qpos[adr] = spread_synergy * 0.5
+            self.data.qpos[adr] = spread * 0.5
 
         # 大拇指
-        thumb_flex = grasp_synergy * 1.2
+        thumb_flex = grasp * 1.2
         for i, adr in enumerate(self.thumb_adrs):
             self.data.qpos[adr] = thumb_flex * (0.5 + i * 0.2)
 
         mujoco.mj_forward(self.model, self.data)
 
     def move(self):
-        """模拟退火的扰动函数"""
+        """模拟退火的扰动函数
+        
+        Annealer 要求 self.state 是数组，但内部使用 StateStruct 进行清晰的状态操作
+        """
+        # 转换为 StateStruct 便于操作
+        current = StateStruct()
+        current.from_array(self.state)
+        
+        # 位置扰动
         if np.random.random() > 0.7:
-            self.state[0:3] += np.random.normal(0, 0.015, 3)#高斯，均值0,标准差0.015，size=3
+            # 随机扰动
+            current.position += np.random.normal(0, 0.015, 3)
         else:
+            # 朝向物体移动
             bottle_pos = self.data.xpos[self.bottle_body_id]
             palm_pos = self.data.xpos[self.palm_body_id]
             direction = bottle_pos - palm_pos
             dist = np.linalg.norm(direction)
             if dist > 1e-6:
-                self.state[0:3] += (direction / dist) * 0.002
+                current.position += (direction / dist) * 0.002
 
-        self.state[3:7] += np.random.normal(0, 0.05, 4)
-        self.state[3:7] /= np.linalg.norm(self.state[3:7])
+        # 姿态扰动 (四元数)
+        current.quaternion += np.random.normal(0, 0.05, 4)
+        current._normalize_quaternion()
         
-        self.state[7] += np.random.normal(0, 0.08)
-        self.state[7] = np.clip(self.state[7], 0.1, 0.9)
+        # 抓取强度扰动
+        current.grasp += np.random.normal(0, 0.08)
+        current.grasp = np.clip(current.grasp, 0.0, 1.0)  # 改为允许完整 [0, 1] 范围
 
-        self.state[8] += np.random.normal(0, 0.05)
-        self.state[8] = np.clip(self.state[8], -0.1, 0.2)
+        # 展开程度扰动
+        current.spread += np.random.normal(0, 0.05)
+        current.spread = np.clip(current.spread, -0.2, 0.3)
+        
+        # 转换回数组供 Annealer 使用
+        self.state = current.to_array()
 
     def energy(self):
         """ 带有环境约束和关节限位惩罚的能量函数 """
-        self.set_hand_pose(self.state)
+        # 将9D数组转换为StateStruct
+        state_struct = StateStruct()
+        state_struct.from_array(self.state)
+        self.set_hand_pose(state_struct)
         
         # 距离项
         bottle_pos = self.data.xpos[self.bottle_body_id]
@@ -303,23 +323,21 @@ def main():
         return
     data = mujoco.MjData(model)
 
-    # 初始状态
-    initial_guess = np.zeros(9)
-    initial_guess[0:3] = [0.4, 0.4, 0.3] 
-    initial_guess[3] = 1.0 
-    initial_guess[7] = 0.0
+    # 初始状态 - 使用 StateStruct
+    initial_state = StateStruct(
+        position=[0.4, 0.4, 0.3],
+        quaternion=[1.0, 0.0, 0.0, 0.0],
+        grasp=0.0,
+        spread=0.0
+    )
+    initial_guess = initial_state.to_array()
 
     planner = GraspPlanner(initial_guess, model, data, bottle_body_name='bottle_body')
     planner.steps = 2500
 
     # 动画控制变量
     planning_done = False
-    
-    target_palm_pos = initial_guess[0:3].copy()
-    target_palm_quat = initial_guess[3:7].copy()
-    final_grasp_synergy = 0.0
-    final_spread_synergy = 0.0
-    
+    target_state = initial_state.copy()  # 规划得到的目标状态
     current_grasp_val = 0.0
     execution_start_time = 0.0
 
@@ -340,16 +358,15 @@ def main():
             if data.time < 0.002:
                 print("\n[状态] 正在规划最佳抓取点...")
                 
+                # 从初始状态开始扰动
                 planner.state = initial_guess.copy()
                 planner.state[0:3] += np.random.uniform(-0.05, 0.05, 3)
                 best_pose, energy = planner.anneal()
                 
-                print(f"[完成] 目标 Grasp: {best_pose[7]:.2f}")
-
-                target_palm_pos = best_pose[0:3]
-                target_palm_quat = best_pose[3:7]
-                final_grasp_synergy = best_pose[7]
-                final_spread_synergy = best_pose[8]
+                # 将规划结果加载到 StateStruct
+                target_state.from_array(best_pose)
+                print(f"[完成] 目标 Grasp: {target_state.grasp:.2f}, Spread: {target_state.spread:.2f}")
+                print(f"[完成] 目标位置: ({target_state.x:.3f}, {target_state.y:.3f}, {target_state.z:.3f})")
                 
                 current_grasp_val = 0.0
                 execution_start_time = time.time()
@@ -362,16 +379,9 @@ def main():
                 anim_time = time.time() - execution_start_time
                 
                 # 0.0s ~ 1.0s：手掌瞬移
-                data.qpos[0:3] = target_palm_pos
-                data.qpos[3:7] = target_palm_quat
-                data.qpos[7] = 0.0  # 手指张开
-                data.qpos[8] = final_spread_synergy
-
-                # TODO 打印qpos对应的index含义
+                data.qpos[0:3] = target_state.get_position()
+                data.qpos[3:7] = target_state.get_quaternion()
                 
-                # 【重要】不要直接设置手指 qpos，让执行器去控制！
-                # 移除了对 data.qpos 中手指关节的直接设置
-
                 # 1.0s ~ 3.0s：手指闭合
                 grasp_start_time = 1.0
                 grasp_duration = 2.0
@@ -379,17 +389,20 @@ def main():
                 if anim_time > grasp_start_time:
                     grasp_progress = (anim_time - grasp_start_time) / grasp_duration
                     grasp_progress = np.clip(grasp_progress, 0.0, 1.0)
-                    current_grasp_val = final_grasp_synergy * grasp_progress
+                    current_grasp_val = target_state.grasp * grasp_progress
                 else:
                     current_grasp_val = 0.0
 
-                # 构造临时 pose 用于计算 ctrl
-                temp_pose = np.zeros(9)
-                temp_pose[7] = current_grasp_val
-                temp_pose[8] = final_spread_synergy
+                # 构造当前执行状态用于计算控制命令
+                exec_state = StateStruct(
+                    position=target_state.get_position(),
+                    quaternion=target_state.get_quaternion(),
+                    grasp=current_grasp_val,
+                    spread=target_state.spread
+                )
                 
-                # 【改进】使用新的 ctrl 计算函数
-                ctrl_cmd = qpos_to_ctrl_improved(model, planner, temp_pose)
+                # 使用新的 ctrl 计算函数
+                ctrl_cmd = qpos_to_ctrl_improved(model, planner, exec_state.to_array())
                 data.ctrl[:] = ctrl_cmd
                 
                 mujoco.mj_step(model, data)
