@@ -353,11 +353,11 @@ def main():
         print(f"joint {i:2d}: {name:20s} qpos[{adr}]  dof[{dof}]")
 
 
-    print(">>> 启动 MuJoCo 查看器...")
-    for i in range(model.nu):
-        name = model.actuator(i).name
-        print(f"ctrl[{i:2d}] -> actuator: {name}")
-    exit()
+    # print(">>> 启动 MuJoCo 查看器...")
+    # for i in range(model.nu):
+    #     name = model.actuator(i).name
+    #     print(f"ctrl[{i:2d}] -> actuator: {name}")
+    # exit()
 
     
     with mujoco.viewer.launch_passive(model, data) as viewer:
