@@ -25,6 +25,7 @@ def get_synergy_mapping(model, hand_prefix):
     flex_indices = [] 
     abd_indices = [] 
     thumb_indices = []
+    tendon_indices = []
     
     jnt_map = {}
     for i in range(model.njnt):
@@ -54,7 +55,6 @@ def get_synergy_mapping(model, hand_prefix):
             thumb_indices.append(qpos_adr)
     
     # 【被忽略的关节】被动关节（无执行器）
-    print("\n【被忽略的关节 - 被动关节（无执行器）】:")
     ignored_names = [
         'lh_FFJ1', 'lh_FFJ2',  # 食指
         'lh_MFJ1', 'lh_MFJ2',  # 中指
@@ -70,14 +70,10 @@ def get_synergy_mapping(model, hand_prefix):
     for jnt_name in tendon_names:
         if jnt_name in jnt_map:
             qpos_adr = jnt_map[jnt_name]
-            tendon_names.append(qpos_adr)
-    
-    print(tendon_names)
-    exit()
+            tendon_indices.append(qpos_adr)
 
-
-    print(f"\n总结: flex={len(flex_indices)} J3, abd={len(abd_indices)} J4, thumb={len(thumb_indices)}")
-    print("=" * 50)
+    # print(f"\n总结: flex={len(flex_indices)} J3, abd={len(abd_indices)} J4, thumb={len(thumb_indices)}")
+    # print("=" * 50)
     
     return flex_indices, abd_indices, thumb_indices, tendon_indices
 
@@ -105,6 +101,7 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
     flex_max_angle = 1.571        # J3 弯曲最大角度 (rad)，ctrlrange=[-0.262, 1.571]
     abd_max_angle = 0.349         # J4 侧摆最大角度 (rad)，ctrlrange=[-0.349, 0.349]
     thumb_max_angles = [1.0472, 1.22173, 0.20944, 0.698132, 1.5708] # 各拇指关节的最大角度
+    tendon_max_angle = 1.5
 
     for i in range(model.nu):
         jnt_id = model.actuator_trnid[i, 0]
@@ -130,6 +127,10 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
         elif jnt_adr in planner.abd_adrs:
             # 【四指侧摆】spread_val 已经是角度偏移
             val = spread_val
+        
+        elif jnt_adr in planner.tendon_adrs:
+            val = grasp_val * tendon_max_angle
+            pass
             
         else:
             val = 0.0
@@ -138,10 +139,10 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
         # 位置伺服会将这个值作为目标角度
         ctrl_cmd[i] = np.clip(val, ctrl_range[0], ctrl_range[1])
 
-    ctrl_cmd[9] = 1.0
-    ctrl_cmd[12] = 1.0
-    ctrl_cmd[15] = 1.0
-    ctrl_cmd[19] = 1.0
+    # ctrl_cmd[9] = 1.0
+    # ctrl_cmd[12] = 1.0
+    # ctrl_cmd[15] = 1.0
+    # ctrl_cmd[19] = 1.0
         
     return ctrl_cmd
 
@@ -180,7 +181,7 @@ class GraspPlanner(Annealer):
                     print(f"Distance calculation includes: {name}")
 
         # 获取关节映射
-        self.flex_adrs, self.abd_adrs, self.thumb_adrs = get_synergy_mapping(model, hand_body_prefix)
+        self.flex_adrs, self.abd_adrs, self.thumb_adrs, self.tendon_adrs = get_synergy_mapping(model, hand_body_prefix)
         
         super(GraspPlanner, self).__init__(state)
 
@@ -218,6 +219,11 @@ class GraspPlanner(Annealer):
         thumb_flex = grasp * 1.2
         for i, adr in enumerate(self.thumb_adrs):
             self.data.qpos[adr] = thumb_flex * (0.5 + i * 0.2)
+
+        # for i, adr in enumerate(self.tendon_adrs):
+        #     pass
+        #     # tendon close
+        #     self.data.qpos[adr] = 
 
         mujoco.mj_forward(self.model, self.data)
 
