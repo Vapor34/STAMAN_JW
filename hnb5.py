@@ -4,6 +4,13 @@ import numpy as np
 import time
 from simanneal import Annealer
 
+# class StateStruct:
+#     def __init__(self):
+#         self.data[9]
+#         xxx
+        #   self.quat = [xxx]
+    
+
 # --- 辅助函数 ---
 
 def get_synergy_mapping(model, hand_prefix):
