@@ -28,11 +28,33 @@ def get_synergy_mapping(model, hand_prefix):
     tendon_indices = []
     
     jnt_map = {}
-    for i in range(model.njnt):
-        jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
-        if jnt_name:
-            jnt_map[jnt_name] = model.jnt_qposadr[i]
-        
+    for i in range(model.nu):
+        act = model.actuator(i)
+        name = act.name
+        trntype = act.trntype
+        trnid = act.trnid[0]
+
+        if trntype == mujoco.mjtTrn.mjTRN_JOINT:
+            jname = model.joint(trnid).name
+            qadr = model.jnt_qposadr[trnid]
+            # jnt_id = model.actuator_trnid[i, 0]
+            jnt_map[jname] = qadr
+        elif trntype == mujoco.mjtTrn.mjTRN_TENDON:
+            tid = trnid
+            for j in range(model.tendon_num[tid]):
+                print(f"{j} - tid")
+                adr = model.tendon_adr[tid] + j
+                jid = model.tendon_jntid[adr]
+                jname = model.joint(jid).name
+                qadr = model.jnt_qposadr[jid]
+                jnt_map[jname] = qadr
+
+    # for i in range(model.njnt):
+    #     jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
+    #     if jnt_name:
+    #         jnt_map[jnt_name] = model.jnt_qposadr[i]
+
+
     # 【四指弯曲】仅 J3（有执行器的远端关节）
     flex_j3_names = ['lh_FFJ3', 'lh_MFJ3', 'lh_RFJ3', 'lh_LFJ3']
     for jnt_name in flex_j3_names:
