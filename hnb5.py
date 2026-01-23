@@ -60,6 +60,7 @@ def get_synergy_mapping(model, hand_prefix):
                     qadr = model.jnt_qposadr[jid]
                     
                     if jname:
+                        print(f"{jname} - {qadr}")
                         jnt_map[jname] = qadr
     
     print(jnt_map)
