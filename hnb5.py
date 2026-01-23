@@ -62,6 +62,8 @@ def get_synergy_mapping(model, hand_prefix):
                     if jname:
                         jnt_map[jname] = qadr
     
+    print(jnt_map)
+    exit()
         
     # for i in range(model.njnt):
     #     jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
@@ -111,7 +113,7 @@ def get_synergy_mapping(model, hand_prefix):
 
     # print(f"\n总结: flex={len(flex_indices)} J3, abd={len(abd_indices)} J4, thumb={len(thumb_indices)}")
     # print("=" * 50)
-    exit()
+    
     
     return flex_indices, abd_indices, thumb_indices, tendon_indices
 
