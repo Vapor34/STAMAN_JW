@@ -349,6 +349,11 @@ def main():
 
 
     print(">>> 启动 MuJoCo 查看器...")
+    for i in range(model.nu):
+        name = model.actuator(i).name
+        print(f"ctrl[{i:2d}] -> actuator: {name}")
+    exit()
+
     
     with mujoco.viewer.launch_passive(model, data) as viewer:
         while viewer.is_running():
