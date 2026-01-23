@@ -336,7 +336,7 @@ def main():
     initial_state = StateStruct(
         position=[0.4, 0.4, 0.3],
         quaternion=[1.0, 0.0, 0.0, 0.0],
-        grasp=3.0,
+        grasp=0.0,
         spread=0.0
     )
     initial_guess = initial_state.to_array()
@@ -376,6 +376,7 @@ def main():
                 planner.state = initial_guess.copy()
                 planner.state[0:3] += np.random.uniform(-0.05, 0.05, 3)
                 best_pose, energy = planner.anneal()
+                best_pose[7] = 1.0
                 
                 # 将规划结果加载到 StateStruct
                 target_state.from_array(best_pose)
