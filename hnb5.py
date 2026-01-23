@@ -336,7 +336,7 @@ def main():
     initial_state = StateStruct(
         position=[0.4, 0.4, 0.3],
         quaternion=[1.0, 0.0, 0.0, 0.0],
-        grasp=0.0,
+        grasp=1.0,
         spread=0.0
     )
     initial_guess = initial_state.to_array()
