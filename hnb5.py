@@ -41,13 +41,17 @@ def get_synergy_mapping(model, hand_prefix):
         elif trntype == mujoco.mjtTrn.mjTRN_TENDON:
             tid = trnid
             ten = model.tendon(tid)
-            for w in ten.wrap:
-                if w.type == mujoco.mjtWrap.mjWRAP_JOINT:
-                    jid = w.objid
+            start = ten.wrapadr
+            end = start + ten.numwrap
+            for widx in range(start, end):
+                w_type = model.wrap_type[widx]
+                if w_type == mujoco.mjtWrap.mjWRAP_JOINT:
+                    jid   = model.wrap_objid[widx]
                     jname = model.joint(jid).name
                     qadr  = model.jnt_qposadr[jid]
                     jnt_map[jname] = qadr
 
+            
 
     print(jnt_map)
     exit()
