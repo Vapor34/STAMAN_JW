@@ -131,7 +131,7 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
             val = spread_val
         
         elif jnt_adr in planner.tendon_adrs:
-            val = grasp_val * tendon_max_angle
+            val = 1.0
             pass
             
         else:
