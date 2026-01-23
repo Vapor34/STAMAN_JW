@@ -71,9 +71,11 @@ def get_synergy_mapping(model, hand_prefix):
         if jnt_name in jnt_map:
             qpos_adr = jnt_map[jnt_name]
             tendon_indices.append(qpos_adr)
+            print(f"tendon inds: {qpos_adr}")
 
     # print(f"\n总结: flex={len(flex_indices)} J3, abd={len(abd_indices)} J4, thumb={len(thumb_indices)}")
     # print("=" * 50)
+    exit()
     
     return flex_indices, abd_indices, thumb_indices, tendon_indices
 
@@ -132,7 +134,6 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
         
         elif jnt_adr in planner.tendon_adrs:
             val = 1.0
-            print(jnt_name)
             pass
             
         else:
@@ -218,10 +219,6 @@ class GraspPlanner(Annealer):
         for i, adr in enumerate(self.thumb_adrs):
             self.data.qpos[adr] = thumb_flex * (0.5 + i * 0.2)
 
-        # for i, adr in enumerate(self.tendon_adrs):
-        #     pass
-        #     # tendon close
-        #     self.data.qpos[adr] = 
 
         mujoco.mj_forward(self.model, self.data)
 
