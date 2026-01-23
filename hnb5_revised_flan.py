@@ -297,6 +297,7 @@ def main():
     data = mujoco.MjData(model)
 
     # 初始状态
+    # 手掌位姿 (x y z qw qx qy qz)
     initial_guess = np.zeros(9)
     initial_guess[0:3] = [0.4, 0.4, 0.3] 
     initial_guess[3] = 1.0 
@@ -315,13 +316,6 @@ def main():
     
     current_grasp_val = 0.0
     execution_start_time = 0.0
-
-    for i in range(model.njnt):
-        name = model.joint(i).name
-        adr = model.joint(i).qposadr
-        dof = model.joint(i).dofadr
-        print(f"joint {i:2d}: {name:20s} qpos[{adr}]  dof[{dof}]")
-
 
     print(">>> 启动 MuJoCo 查看器...")
     
@@ -359,8 +353,6 @@ def main():
                 data.qpos[3:7] = target_palm_quat
                 data.qpos[7] = 0.0  # 手指张开
                 data.qpos[8] = final_spread_synergy
-
-                # TODO 打印qpos对应的index含义
                 
                 # 【重要】不要直接设置手指 qpos，让执行器去控制！
                 # 移除了对 data.qpos 中手指关节的直接设置
