@@ -413,7 +413,7 @@ def main():
                 
                 # 使用新的 ctrl 计算函数
                 ctrl_cmd = qpos_to_ctrl_improved(model, planner, exec_state.to_array())
-                data.ctrl[:] = ctrl_cmd
+                data.ctrl = ctrl_cmd
                 
                 mujoco.mj_step(model, data)
 
