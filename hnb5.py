@@ -5,7 +5,45 @@ import time
 from simanneal import Annealer
 from state_struct import StateStruct
 
-# --- 辅助函数 ---
+def get_tendon_actuator_map(model):
+    """
+    建立 腱名称 到 执行器控制索引 的映射表
+    tendon_to_actuator={腱名称: 执行器控制索引}
+    """
+    tendon_to_actuator = {}
+    
+    for act_id in range(model.nu):
+        # 判断执行器是否作用于腱 (mjTRN_TENDON = 3)
+        if model.actuator_trntype[act_id] == mujoco.mjtTrn.mjTRN_TENDON:
+            # 获取该执行器关联的 Tendon ID
+            t_id = model.actuator_trnid[act_id, 0]
+            # 获取腱的名字
+            t_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_TENDON, t_id)
+            # 记录映射
+            tendon_to_actuator[t_name] = act_id
+            
+    return tendon_to_actuator
+
+def control_tendon_actuators(model, data, ctrl_value):
+    """设置所有腱执行器的控制信号
+    
+    腱系统会自动耦联 J1、J2 关节，实现四指的被动弯曲。
+    这个函数直接修改 data.ctrl，无需返回值。
+    
+    Args:
+        model: MuJoCo模型
+        data: MuJoCo数据对象
+        ctrl_value: 所有腱执行器的目标控制值（张力强度）
+    """
+    tendon_to_actuator = get_tendon_actuator_map(model)
+    
+    # 将腱执行器的控制值设置到 data.ctrl
+    for tendon_name, actuator_idx in tendon_to_actuator.items():
+        data.ctrl[actuator_idx] = ctrl_value
+
+
+
+
 
 def get_synergy_mapping(model, hand_prefix):
     """
@@ -64,11 +102,12 @@ def get_synergy_mapping(model, hand_prefix):
     
     # print(jnt_map)
     # exit()
-    jnt_map = {}
+    jnt_map = {} # 关节名称 → qpos地址
     for i in range(model.njnt):
         jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
         if jnt_name:
             jnt_map[jnt_name] = model.jnt_qposadr[i]
+
 
 
     # 【四指弯曲】仅 J3（有执行器的远端关节）
@@ -104,20 +143,18 @@ def get_synergy_mapping(model, hand_prefix):
         if jnt_name in jnt_map:
             qpos_adr = jnt_map[jnt_name]
     
-    tendon_names = ["lh_FFJ0", "lh_MFJ0", "lh_RFJ0", "lh_LFJ0"]
-    for jnt_name in tendon_names:
-        if jnt_name in jnt_map:
-            qpos_adr = jnt_map[jnt_name]
-            tendon_indices.append(qpos_adr)
-            print(f"tendon inds: {qpos_adr}")
+    # tendon_names = ["lh_FFJ0", "lh_MFJ0", "lh_RFJ0", "lh_LFJ0"]
+    # for jnt_name in tendon_names:
+    #     if jnt_name in jnt_map:
+    #         qpos_adr = jnt_map[jnt_name]
+    #         tendon_indices.append(qpos_adr)
+    #         print(f"tendon inds: {qpos_adr}")
 
-    # print(f"\n总结: flex={len(flex_indices)} J3, abd={len(abd_indices)} J4, thumb={len(thumb_indices)}")
-    # print("=" * 50)
     
     
-    return flex_indices, abd_indices, thumb_indices, tendon_indices
+    return flex_indices, abd_indices, thumb_indices
 
-def qpos_to_ctrl_improved(model, planner, target_pose):
+def qpos_to_ctrl_improved(model, data, planner, target_pose):
     """
     【正确版本】协同变量 → 目标关节角度（位置伺服）
     
@@ -130,13 +167,15 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
     • 定义每个关节类型的最大摆动角度
     • grasp_val [0,1] 线性映射到 [0, max_angle]
     • 位置伺服自动处理动力学
+
+    target_pose: 9D数组 [x, y, z, qw, qx, qy, qz, grasp, spread]
     """
     #### grasping encoding: (x y z qw qx qy qz alpha beta) 
     ctrl_cmd = np.zeros(model.nu)
     grasp_val = np.clip(target_pose[7], 0.0, 1.0) # tanh sigmoid 归一化函数
     spread_val = np.clip(target_pose[8], -0.2, 0.3)
 
-    print(f"======= grasp value: {grasp_val}")
+    # print(f"======= grasp value: {grasp_val}")
     
     # 【参数】每类关节的最大控制角度
     # 这些值应该在各自的 ctrlrange 范围内
@@ -170,21 +209,14 @@ def qpos_to_ctrl_improved(model, planner, target_pose):
             # 【四指侧摆】spread_val 已经是角度偏移
             val = spread_val
         
-        elif jnt_adr in planner.tendon_adrs:
-            val = 1.0
-            pass
+        # elif jnt_adr in planner.tendon_adrs:
+        #     val = 1.0
+        #     pass
             
         else:
             val = 0.0
             
-        # 严格按执行器的 ctrlrange 进行裁剪
-        # 位置伺服会将这个值作为目标角度
         ctrl_cmd[i] = np.clip(val, ctrl_range[0], ctrl_range[1])
-
-        ctrl_cmd[9] = 2.0
-        ctrl_cmd[12] = 2.0
-        ctrl_cmd[15] = 2.0
-        ctrl_cmd[19] = 2.0
 
     return ctrl_cmd
 
@@ -223,7 +255,7 @@ class GraspPlanner(Annealer):
                     print(f"Distance calculation includes: {name}")
 
         # 获取关节映射
-        self.flex_adrs, self.abd_adrs, self.thumb_adrs, self.tendon_adrs = get_synergy_mapping(model, hand_body_prefix)
+        self.flex_adrs, self.abd_adrs, self.thumb_adrs = get_synergy_mapping(model, hand_body_prefix)
         
         super(GraspPlanner, self).__init__(state)
 
@@ -457,11 +489,11 @@ def main():
     current_grasp_val = 0.0
     execution_start_time = 0.0
 
-    for i in range(model.njnt):
-        name = model.joint(i).name
-        adr = model.joint(i).qposadr
-        dof = model.joint(i).dofadr
-        print(f"joint {i:2d}: {name:20s} qpos[{adr}]  dof[{dof}]")
+    # for i in range(model.njnt):
+    #     name = model.joint(i).name
+    #     adr = model.joint(i).qposadr
+    #     dof = model.joint(i).dofadr
+    #     print(f"joint {i:2d}: {name:20s} qpos[{adr}]  dof[{dof}]")
 
 
     # print(">>> 启动 MuJoCo 查看器...")
@@ -483,7 +515,7 @@ def main():
                 planner.state = initial_guess.copy()
                 planner.state[0:3] += np.random.uniform(-0.05, 0.05, 3)
                 best_pose, energy = planner.anneal()
-                best_pose[7] = 1.0
+                # best_pose[7] = 1.0
                 
                 # 将规划结果加载到 StateStruct
                 target_state.from_array(best_pose)
@@ -523,8 +555,13 @@ def main():
                     spread=target_state.spread
                 )
                 
-                # output contro command
-                data.ctrl = qpos_to_ctrl_improved(model, planner, exec_state.to_array())
+                # 设置关节执行器的控制信号
+                joint_ctrl = qpos_to_ctrl_improved(model, data, planner, exec_state.to_array())
+                data.ctrl = joint_ctrl
+                
+                # 设置腱执行器的控制信号（覆盖腱对应的 ctrl 索引，实现 J1、J2 的被动耦联）
+                control_tendon_actuators(model, data, 2.0)
+                
                 mujoco.mj_step(model, data)
 
             viewer.sync()
