@@ -7,6 +7,111 @@ import time
 from simanneal import Annealer
 import argparse
 
+
+def get_tendon_actuator_map(model):
+    """
+    建立 腱名称 到 执行器控制索引 的映射表
+    tendon_to_actuator={腱名称: 执行器控制索引}
+    """
+    tendon_to_actuator = {}
+    
+    for act_id in range(model.nu):
+        # 判断执行器是否作用于腱 (mjTRN_TENDON = 3)
+        if model.actuator_trntype[act_id] == mujoco.mjtTrn.mjTRN_TENDON:
+            # 获取该执行器关联的 Tendon ID
+            t_id = model.actuator_trnid[act_id, 0]
+            # 获取腱的名字
+            t_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_TENDON, t_id)
+            # 记录映射
+            tendon_to_actuator[t_name] = act_id
+            
+    return tendon_to_actuator
+
+
+
+def control_tendon_actuators(model, data, ctrl_value):
+    tendon_to_actuator = get_tendon_actuator_map(model)
+    
+    # 将腱执行器的控制值设置到 data.ctrl
+    for tendon_name, actuator_idx in tendon_to_actuator.items():
+        data.ctrl[actuator_idx] = ctrl_value
+
+
+
+
+
+def get_synergy_mapping(model, hand_prefix):
+    """
+    【手动分类】根据Shadow Hand实际配置手动列出所有关节并分类。
+    
+    执行器配置（来自 hand_joint_test.py）：
+    ✓ 可控关节（有执行器）:
+      - 食指 J3 (lh_FFJ3)、中指 J3 (lh_MFJ3)、无名指 J3 (lh_RFJ3)、小指 J3 (lh_LFJ3)
+      - 食指 J4 (lh_FFJ4)、中指 J4 (lh_MFJ4)、无名指 J4 (lh_RFJ4)、小指 J4 (lh_LFJ4)
+      - 大拇指所有关节 (THJ1-5)
+      - 手腕 (WRJ1-2)
+    
+    ✗ 被动关节（无执行器）:
+      - 四指 J1、J2 (被忽略)
+      - 小指 J5 (lh_LFJ5) (被忽略)
+    """
+    flex_indices = [] 
+    abd_indices = [] 
+    thumb_indices = []
+    tendon_indices = []
+
+    jnt_map = {} # 关节名称 → qpos地址
+    for i in range(model.njnt):
+        jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
+        if jnt_name:
+            jnt_map[jnt_name] = model.jnt_qposadr[i]
+
+
+
+    # 【四指弯曲】仅 J3（有执行器的远端关节）
+    flex_j3_names = ['lh_FFJ3', 'lh_MFJ3', 'lh_RFJ3', 'lh_LFJ3']
+    for jnt_name in flex_j3_names:
+        if jnt_name in jnt_map:
+            qpos_adr = jnt_map[jnt_name]
+            flex_indices.append(qpos_adr)
+    
+    # 【侧摆】J4（四指的侧摆关节）
+    abd_j4_names = ['lh_FFJ4', 'lh_MFJ4', 'lh_RFJ4', 'lh_LFJ4']
+    for jnt_name in abd_j4_names:
+        if jnt_name in jnt_map:
+            qpos_adr = jnt_map[jnt_name]
+            abd_indices.append(qpos_adr)
+    
+    # 【大拇指】所有关节
+    thumb_names = ['lh_THJ1', 'lh_THJ2', 'lh_THJ3', 'lh_THJ4', 'lh_THJ5']
+    for jnt_name in thumb_names:
+        if jnt_name in jnt_map:
+            qpos_adr = jnt_map[jnt_name]
+            thumb_indices.append(qpos_adr)
+    
+    # 【被忽略的关节】被动关节（无执行器）
+    ignored_names = [
+        'lh_FFJ1', 'lh_FFJ2',  # 食指
+        'lh_MFJ1', 'lh_MFJ2',  # 中指
+        'lh_RFJ1', 'lh_RFJ2',  # 无名指
+        'lh_LFJ1', 'lh_LFJ2', 'lh_LFJ5',  # 小指
+        'lh_WRJ1', 'lh_WRJ2'   # 手腕（可以添加如需要）
+    ]
+    for jnt_name in ignored_names:
+        if jnt_name in jnt_map:
+            qpos_adr = jnt_map[jnt_name]
+    
+    # tendon_names = ["lh_FFJ0", "lh_MFJ0", "lh_RFJ0", "lh_LFJ0"]
+    # for jnt_name in tendon_names:
+    #     if jnt_name in jnt_map:
+    #         qpos_adr = jnt_map[jnt_name]
+    #         tendon_indices.append(qpos_adr)
+    #         print(f"tendon inds: {qpos_adr}")
+
+    
+    
+    return flex_indices, abd_indices, thumb_indices
+
 class GraspPlanner(Annealer):
     def __init__(self, state, model, data, bottle_body_name, hand_body_prefix='lh_'):
         self.model = model
