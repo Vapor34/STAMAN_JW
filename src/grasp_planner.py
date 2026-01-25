@@ -6,6 +6,7 @@ import numpy as np
 import time
 from simanneal import Annealer
 import argparse
+from src.grasp_state import StateStruct
 
 
 def get_tendon_actuator_map(model):
