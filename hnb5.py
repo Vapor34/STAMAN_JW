@@ -4,6 +4,8 @@ import numpy as np
 import time
 from simanneal import Annealer
 from state_struct import StateStruct
+import argparse
+
 
 from src.mujoco_utils import mujoco_load
 
@@ -66,44 +68,7 @@ def get_synergy_mapping(model, hand_prefix):
     abd_indices = [] 
     thumb_indices = []
     tendon_indices = []
-    
-    # jnt_map = {}
-    # for i in range(model.nu):
-    #     trntype = model.actuator_trntype[i]
-    #     trnid = model.actuator_trnid[i][0]
-    #     if trntype == mujoco.mjtTrn.mjTRN_JOINT:
-    #         jid = trnid
-    #         jname = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, jid)
-    #         qadr = model.jnt_qposadr[jid]
-    #         if jname:
-    #             jnt_map[jname] = qadr
-    #     elif trntype == mujoco.mjtTrn.mjTRN_TENDON:
-    #         tid = trnid
-    #         # 在 mjModel 中，tendon 的路径对象定义存储在 wrap_* 数组中
-    #         # 需要根据 tendon_adr 和 tendon_num 找到对应的范围
-    #         start_addr = model.tendon_adr[tid]
-    #         num_wraps = model.tendon_num[tid]
-            
-    #         for k in range(num_wraps):
-    #             # 获取当前 wrap 对象的全局索引
-    #             wrap_idx = start_addr + k
-                
-    #             # 检查 wrap 对象的类型
-    #             wtype = model.wrap_type[wrap_idx]
-    #             objid = model.wrap_objid[wrap_idx]
-                
-    #             # 如果 wrap 对象是关节 (mjWRAP_JOINT)
-    #             # 这意味着该 tendon 跨越并影响了这个关节
-    #             if wtype == mujoco.mjtWrap.mjWRAP_JOINT:
-    #                 jid = objid
-    #                 jname = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, jid)
-    #                 qadr = model.jnt_qposadr[jid]
-                    
-    #                 if jname:
-    #                     jnt_map[jname] = qadr
-    
-    # print(jnt_map)
-    # exit()
+
     jnt_map = {} # 关节名称 → qpos地址
     for i in range(model.njnt):
         jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
@@ -462,11 +427,15 @@ class GraspPlanner(Annealer):
         return total_energy
 
 
-# --- 主程序 ---
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model-path', type=str, default="shadow_hand/scene_left.xml", help='mujoco models path')
+    args = parser.parse_args()
+    return args
 
 def main():
-    model_path = 'shadow_hand/scene_left.xml' 
-    model, data = mujoco_load(model_path)
+    args = parse_args()
+    model, data = mujoco_load(args.model_path)
 
     # 初始状态 - 使用 StateStruct
     initial_state = StateStruct(
