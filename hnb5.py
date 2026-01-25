@@ -3,11 +3,11 @@ import mujoco.viewer
 import numpy as np
 import time
 from simanneal import Annealer
-from state_struct import StateStruct
 import argparse
 
 
 from src.mujoco_utils import mujoco_load
+from src.grasp_state import StateStruct
 
 def get_tendon_actuator_map(model):
     """
