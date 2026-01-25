@@ -141,7 +141,7 @@ def qpos_to_ctrl_improved(model, data, planner, target_pose):
     flex_max_angle = 1.571        # J3 弯曲最大角度 (rad)，ctrlrange=[-0.262, 1.571]
     abd_max_angle = 0.349         # J4 侧摆最大角度 (rad)，ctrlrange=[-0.349, 0.349]
     thumb_max_angles = [1.0472, 1.22173, 0.20944, 0.698132, 1.5708] # 各拇指关节的最大角度
-    tendon_max_angle = 1.5
+    tendon_max_angle = 3.14
 
     tendon_actuator_map = get_tendon_actuator_map(model)
 
