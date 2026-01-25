@@ -28,17 +28,9 @@ def get_tendon_actuator_map(model):
             
     return tendon_to_actuator
 
+
+
 def control_tendon_actuators(model, data, ctrl_value):
-    """设置所有腱执行器的控制信号
-    
-    腱系统会自动耦联 J1、J2 关节，实现四指的被动弯曲。
-    这个函数直接修改 data.ctrl，无需返回值。
-    
-    Args:
-        model: MuJoCo模型
-        data: MuJoCo数据对象
-        ctrl_value: 所有腱执行器的目标控制值（张力强度）
-    """
     tendon_to_actuator = get_tendon_actuator_map(model)
     
     # 将腱执行器的控制值设置到 data.ctrl
@@ -151,6 +143,8 @@ def qpos_to_ctrl_improved(model, data, planner, target_pose):
     thumb_max_angles = [1.0472, 1.22173, 0.20944, 0.698132, 1.5708] # 各拇指关节的最大角度
     tendon_max_angle = 1.5
 
+    tendon_actuator_map = get_tendon_actuator_map(model)
+
     for i in range(model.nu):
         jnt_id = model.actuator_trnid[i, 0]
         jnt_adr = model.jnt_qposadr[jnt_id]
@@ -175,15 +169,17 @@ def qpos_to_ctrl_improved(model, data, planner, target_pose):
         elif jnt_adr in planner.abd_adrs:
             # 【四指侧摆】spread_val 已经是角度偏移
             val = spread_val
-        
         # elif jnt_adr in planner.tendon_adrs:
         #     val = 1.0
         #     pass
             
         else:
             val = 0.0
-            
+
         ctrl_cmd[i] = np.clip(val, ctrl_range[0], ctrl_range[1])
+
+    for td_name, actuator_idx in tendon_actuator_map.items():
+        ctrl_cmd[actuator_idx] = grasp_val * tendon_max_angle               
 
     return ctrl_cmd
 
@@ -526,7 +522,7 @@ def main():
                 data.ctrl = joint_ctrl
                 
                 # 设置腱执行器的控制信号（覆盖腱对应的 ctrl 索引，实现 J1、J2 的被动耦联）
-                control_tendon_actuators(model, data, 2.0)
+                # control_tendon_actuators(model, data, 2.0)
                 
                 mujoco.mj_step(model, data)
 
