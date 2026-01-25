@@ -77,8 +77,9 @@ def parse_args():
     parser.add_argument('--model-path', type=str, default="shadow_hand/scene_left.xml", help='mujoco models path')
     args = parser.parse_args()
     return args
+    
 
-def main():
+if __name__ == "__main__":
     args = parse_args()
     model, data = mujoco_load(args.model_path)
 
@@ -164,6 +165,3 @@ def main():
             time_until_next_step = model.opt.timestep - (time.time() - step_start)
             if time_until_next_step > 0:
                 time.sleep(time_until_next_step)
-
-if __name__ == "__main__":
-    main()
