@@ -481,6 +481,7 @@ def main():
                 
                 # 将规划结果加载到 StateStruct
                 target_state.from_array(best_pose)
+                target_state.grasp = 0.8
                 print(f"[完成] 目标 Grasp: {target_state.grasp:.2f}, Spread: {target_state.spread:.2f}")
                 print(f"[完成] 目标位置: ({target_state.x:.3f}, {target_state.y:.3f}, {target_state.z:.3f})")
                 
