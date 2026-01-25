@@ -8,7 +8,7 @@ import argparse
 
 from src.mujoco_utils import mujoco_load
 from src.grasp_state import StateStruct
-from src.grasp_planner import GraspPlanner
+from src.grasp_planner import GraspPlanner, get_synergy_mapping, get_tendon_actuator_map
 
 
 def qpos_to_ctrl_improved(model, data, planner, target_pose):
