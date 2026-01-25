@@ -5,7 +5,6 @@ import time
 from simanneal import Annealer
 import argparse
 
-
 from src.mujoco_utils import mujoco_load
 from src.grasp_state import StateStruct
 from src.grasp_planner import GraspPlanner, get_synergy_mapping, get_tendon_actuator_map
@@ -31,8 +30,6 @@ def qpos_to_ctrl_improved(model, data, planner, target_pose):
     ctrl_cmd = np.zeros(model.nu)
     grasp_val = np.clip(target_pose[7], 0.0, 1.0) # tanh sigmoid 归一化函数
     spread_val = np.clip(target_pose[8], -0.2, 0.3)
-
-    # print(f"======= grasp value: {grasp_val}")
     
     # 【参数】每类关节的最大控制角度
     # 这些值应该在各自的 ctrlrange 范围内
@@ -51,12 +48,10 @@ def qpos_to_ctrl_improved(model, data, planner, target_pose):
         # 获取该执行器的物理限制
         ctrl_range = model.actuator_ctrlrange[i]
         
-        if jnt_adr in planner.flex_adrs:
-            # 【四指弯曲】grasp_val [0,1] → 目标角度 [0, flex_max_angle]
+        if jnt_adr in planner.flex_adrs: # 【四指弯曲】grasp_val [0,1] → 目标角度 [0, flex_max_angle]
             val = grasp_val * flex_max_angle
                 
-        elif jnt_adr in planner.thumb_adrs:
-            # 【大拇指】根据拇指内索引选择对应的最大角度
+        elif jnt_adr in planner.thumb_adrs: # 【大拇指】根据拇指内索引选择对应的最大角度
             try:
                 thumb_idx = planner.thumb_adrs.index(jnt_adr)
                 max_angle = thumb_max_angles[thumb_idx] if thumb_idx < len(thumb_max_angles) else 0.8
@@ -64,13 +59,8 @@ def qpos_to_ctrl_improved(model, data, planner, target_pose):
                 max_angle = 0.8
             val = grasp_val * max_angle
             
-        elif jnt_adr in planner.abd_adrs:
-            # 【四指侧摆】spread_val 已经是角度偏移
+        elif jnt_adr in planner.abd_adrs: # 【四指侧摆】spread_val 已经是角度偏移
             val = spread_val
-        # elif jnt_adr in planner.tendon_adrs:
-        #     val = 1.0
-        #     pass
-            
         else:
             val = 0.0
 
@@ -80,7 +70,6 @@ def qpos_to_ctrl_improved(model, data, planner, target_pose):
         ctrl_cmd[actuator_idx] = grasp_val * tendon_max_angle               
 
     return ctrl_cmd
-
 
 
 def parse_args():
@@ -110,20 +99,6 @@ def main():
     target_state = initial_state.copy()  # 规划得到的目标状态
     current_grasp_val = 0.0
     execution_start_time = 0.0
-
-    # for i in range(model.njnt):
-    #     name = model.joint(i).name
-    #     adr = model.joint(i).qposadr
-    #     dof = model.joint(i).dofadr
-    #     print(f"joint {i:2d}: {name:20s} qpos[{adr}]  dof[{dof}]")
-
-
-    # print(">>> 启动 MuJoCo 查看器...")
-    # for i in range(model.nu):
-    #     name = model.actuator(i).name
-    #     print(f"ctrl[{i:2d}] -> actuator: {name}")
-    # exit()
-
     
     with mujoco.viewer.launch_passive(model, data) as viewer:
         while viewer.is_running():
@@ -181,9 +156,6 @@ def main():
                 # 设置关节执行器的控制信号
                 joint_ctrl = qpos_to_ctrl_improved(model, data, planner, exec_state.to_array())
                 data.ctrl = joint_ctrl
-                
-                # 设置腱执行器的控制信号（覆盖腱对应的 ctrl 索引，实现 J1、J2 的被动耦联）
-                # control_tendon_actuators(model, data, 2.0)
                 
                 mujoco.mj_step(model, data)
 
