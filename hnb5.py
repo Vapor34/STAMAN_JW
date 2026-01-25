@@ -5,6 +5,8 @@ import time
 from simanneal import Annealer
 from state_struct import StateStruct
 
+from src.mujoco_utils import mujoco_load
+
 def get_tendon_actuator_map(model):
     """
     建立 腱名称 到 执行器控制索引 的映射表
@@ -464,12 +466,7 @@ class GraspPlanner(Annealer):
 
 def main():
     model_path = 'shadow_hand/scene_left.xml' 
-    try:
-        model = mujoco.MjModel.from_xml_path(model_path)
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        return
-    data = mujoco.MjData(model)
+    model, data = mujoco_load(model_path)
 
     # 初始状态 - 使用 StateStruct
     initial_state = StateStruct(
