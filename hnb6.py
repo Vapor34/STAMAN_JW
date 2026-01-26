@@ -9,6 +9,35 @@ from src.mujoco_utils import mujoco_load
 from src.grasp_state import StateStruct
 from src.grasp_planner import GraspPlanner, get_synergy_mapping, get_tendon_actuator_map
 
+"""
+大拇指： lh_A_THJx
+    J1:近端弯曲
+    J2:远端弯曲
+    J3:远端关节侧摆
+    J4:虎口大小（值越大，虎口越开）
+    J5:掌根关节弯曲（伴有一定旋转）
+"""
+
+#给定拇指关节角度范围，实现"C"型手势抓取瓶子
+def apply_fixed_joint_angles(model, data, _fixed_cache={}):
+    """
+    仅在第一次执行时生成随机角度，后续调用将直接应用缓存的值。
+    """
+    # 1. 检查缓存是否为空（即是否为第一次运行）
+    if not _fixed_cache:
+        rng = np.random.default_rng(seed=42)
+        _fixed_cache['lh_THJ5'] = np.clip(rng.normal(0.5, 0.015), -1.05, 1.05)
+        _fixed_cache['lh_THJ4'] = np.clip(rng.normal(1.0, 0.015), 0, 1.22)
+        
+    # 2. 遍历模型关节并应用
+    for jnt_id in range(model.njnt):
+        jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, jnt_id)
+        if jnt_name in _fixed_cache:
+            joint_addr = model.jnt_qposadr[jnt_id]
+            # 强制覆盖 qpos
+            data.qpos[joint_addr] = _fixed_cache[jnt_name]
+
+
 
 def qpos_to_ctrl(model, planner, target_pose):
     """
@@ -85,6 +114,8 @@ def parse_args():
     return args
     
 
+rng = np.random.default_rng(seed=42)
+
 if __name__ == "__main__":
     args = parse_args()
     model, data = mujoco_load(args.model_path)
@@ -159,7 +190,20 @@ if __name__ == "__main__":
                     grasp=current_grasp_val,
                     spread=target_state.spread
                 )
-                print(f"exec_state grasp: {exec_state.grasp:.3f}")
+
+
+                # =====特定关节的固定角度（可选覆盖） =====
+                # 如果需要固定某些拇指关节的角度，在这里指定
+                
+                apply_fixed_joint_angles(model, data)
+
+
+
+                # ====================================
+
+
+
+
                 # 设置关节执行器的控制信号
                 joint_ctrl = qpos_to_ctrl(model, planner, exec_state.to_array())
                 data.ctrl = joint_ctrl

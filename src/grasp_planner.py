@@ -1,3 +1,8 @@
+"""
+抓取规划器：使用模拟退火优化Shadow Hand的抓取姿态
+"""
+
+
 
 from simanneal import Annealer
 import mujoco
@@ -215,6 +220,9 @@ class GraspPlanner(Annealer):
             # 使用递进系数：关节0=0.5倍，关节1=0.7倍，关节2=0.9倍，等等
             progression = 0.5 + i * THUMB_PROGRESSION
             self.data.qpos[joint_addr] = thumb_flex * progression
+
+        
+        
         
         # ===== 3. 执行前向运动学计算 =====
         # 这计算所有位置、速度、加速度和接触点
@@ -273,7 +281,7 @@ class GraspPlanner(Annealer):
         W_COLLISION_FLOOR = 500.0 # 手-地面碰撞惩罚
         W_JOINT_LIMIT = 1000.0    # 关节超限惩罚
         W_GRASP_PRIOR = 1.0       # 抓取力度先验权重
-        GRASP_TARGET = 0.4        # 目标抓取力度（偏好值）
+        GRASP_TARGET = 1        # 目标抓取力度（偏好值）
         COLLISION_THRESHOLD = -0.005  # 碰撞判定阈值(m)，<0为穿透
         
         # 将9D数组转换为StateStruct
@@ -336,7 +344,7 @@ class GraspPlanner(Annealer):
                     joint_limit_penalty += np.square(q_val - high)
         
         # ===== 5. 抓取力度先验（倾向于中等力度） =====
-        # 目标grasp=0.4：既能有效接触，又避免过度闭合
+        # 目标grasp=GRASP_TARGET：既能有效接触，又避免过度闭合
         grasp_prior_energy = np.square(state_struct.grasp - GRASP_TARGET)
         
         # ===== 总能量 =====
