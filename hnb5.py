@@ -63,7 +63,6 @@ def get_synergy_mapping(model, hand_prefix):
     flex_indices = [] 
     abd_indices = [] 
     thumb_indices = []
-    tendon_indices = []
     
     # jnt_map = {}
     # for i in range(model.nu):
@@ -380,10 +379,10 @@ class GraspPlanner(Annealer):
         W_ORIENTATION = 10.0      # 朝向性权重
         W_COLLISION_HAND = 200.0  # 手-物碰撞惩罚
         W_COLLISION_FLOOR = 500.0 # 手-地面碰撞惩罚
-        W_JOINT_LIMIT = 1000.0    # 关节超限惩罚
+        W_JOINT_LIMIT = 500.0    # 关节超限惩罚
         W_GRASP_PRIOR = 1.0       # 抓取力度先验权重
-        GRASP_TARGET = 0.4        # 目标抓取力度（偏好值）
-        COLLISION_THRESHOLD = -0.005  # 碰撞判定阈值(m)，<0为穿透
+        GRASP_TARGET = 0.5    # 目标抓取力度（偏好值）
+        COLLISION_THRESHOLD = 0.1  # 碰撞判定阈值(m)，<0为穿透
         
         # 将9D数组转换为StateStruct
         state_struct = StateStruct()
@@ -445,7 +444,7 @@ class GraspPlanner(Annealer):
                     joint_limit_penalty += np.square(q_val - high)
         
         # ===== 5. 抓取力度先验（倾向于中等力度） =====
-        # 目标grasp=0.4：既能有效接触，又避免过度闭合
+        # 目标grasp=x：既能有效接触，又避免过度闭合
         grasp_prior_energy = np.square(state_struct.grasp - GRASP_TARGET)
         
         # ===== 总能量 =====
@@ -481,7 +480,7 @@ def main():
     initial_guess = initial_state.to_array()
 
     planner = GraspPlanner(initial_guess, model, data, bottle_body_name='bottle_body')
-    planner.steps = 2500
+    planner.steps = 5000
 
     # 动画控制变量
     planning_done = False
@@ -515,7 +514,7 @@ def main():
                 planner.state = initial_guess.copy()
                 planner.state[0:3] += np.random.uniform(-0.05, 0.05, 3)
                 best_pose, energy = planner.anneal()
-                # best_pose[7] = 1.0
+
                 
                 # 将规划结果加载到 StateStruct
                 target_state.from_array(best_pose)
@@ -554,7 +553,7 @@ def main():
                     grasp=current_grasp_val,
                     spread=target_state.spread
                 )
-                
+                print(f"exec_state grasp: {exec_state.grasp:.3f}")
                 # 设置关节执行器的控制信号
                 joint_ctrl = qpos_to_ctrl_improved(model, data, planner, exec_state.to_array())
                 data.ctrl = joint_ctrl
