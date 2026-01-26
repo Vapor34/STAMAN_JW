@@ -10,7 +10,7 @@ from src.grasp_state import StateStruct
 from src.grasp_planner import GraspPlanner, get_synergy_mapping, get_tendon_actuator_map
 
 
-def qpos_to_ctrl_improved(model, data, planner, target_pose):
+def qpos_to_ctrl(model, data, planner, target_pose):
     """
     【正确版本】协同变量 → 目标关节角度（位置伺服）
     
@@ -155,7 +155,7 @@ if __name__ == "__main__":
                 )
                 print(f"exec_state grasp: {exec_state.grasp:.3f}")
                 # 设置关节执行器的控制信号
-                joint_ctrl = qpos_to_ctrl_improved(model, data, planner, exec_state.to_array())
+                joint_ctrl = qpos_to_ctrl(model, data, planner, exec_state.to_array())
                 data.ctrl = joint_ctrl
                 
                 mujoco.mj_step(model, data)
