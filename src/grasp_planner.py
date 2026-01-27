@@ -1,8 +1,6 @@
 """
 抓取规划器：使用模拟退火优化Shadow Hand的抓取姿态
 """
-l
-
 
 from simanneal import Annealer
 import mujoco
