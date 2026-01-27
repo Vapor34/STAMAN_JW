@@ -1,9 +1,14 @@
 """
-抓取控制变量管理模块
+grasp control module
+you can use this module to get and set the actuator(joint/tendon) control values if you know the actuator names.
 
-实现控制变量的两种表示方式:
-1. 扁平化表示(Flattened)act_name_list:1D 数组，方便优化算法使用
-2. 结构化表示(Structured)act_name_dic:字典,方便人类理解和调试
+two representations are provided:
+1. (Flattened)act_name_list:[actuator_name1, actuator_name2, ...]
+2. (Structured)act_name_dic:{act_name:act_index, ...}
+
+two main methods are provided:
+- set_act_val(joint_name, value): set single joint control value
+- get_act_val(joint_name): get single joint control value
 """
 
 import numpy as np
@@ -16,8 +21,8 @@ class GraspControl:
     def __init__(self, model, data, planner):
         """
         Args:
-            model: MuJoCo 模型
-            data: MuJoCo 数据
+            model: MuJoCo model
+            data: MuJoCo data
             planner: GraspPlanner 实例（包含 flex_adrs, abd_adrs, thumb_adrs)
         Attributes:
             act_name_list: [actuator_name1, actuator_name2, ...]
