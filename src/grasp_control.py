@@ -7,6 +7,8 @@ two representations are provided:
 2. (Structured)act_name_dic:{act_name:act_index, ...}
 
 two main methods are provided:
+- get_act_name_list(): get actuator name list
+- get_act_name_dic(): get actuator name dictionary
 - set_act_val(joint_name, value): set single joint control value
 - get_act_val(joint_name): get single joint control value
 """
@@ -18,7 +20,7 @@ from src.grasp_state import StateStruct
 
 class GraspControl:
 
-    def __init__(self, model, data, planner):
+    def __init__(self, model, data):
         """
         Args:
             model: MuJoCo model
@@ -30,7 +32,6 @@ class GraspControl:
         """
         self.model = model
         self.data = data
-        self.planner = planner
 
         self.act_name_list = [
             "lh_WRJ2","lh_WRJ1",
@@ -75,7 +76,13 @@ class GraspControl:
                             'lh_RFJ4': 13, 'lh_RFJ3': 14, 'lh_RFJ0': 15, 
                             'lh_LFJ5': 16, 'lh_LFJ4': 17, 'lh_LFJ3': 18, 'lh_LFJ0': 19}"""
    
-
+    def get_act_name_list(self):
+        """get actuator name list"""
+        return self.act_name_list
+    
+    def get_act_name_dic(self):
+        """get actuator name dictionary"""
+        return self.act_name_dic
 
     def set_act_val(self, joint_name, value):
         """set single joint control value"""

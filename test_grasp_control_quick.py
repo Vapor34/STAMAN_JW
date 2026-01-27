@@ -30,11 +30,11 @@ try:
     print(f"✓ 初始状态创建成功")
     
     # 创建 GraspPlanner
-    planner = GraspPlanner(state, model, data, "bottle", hand_body_prefix='lh_')
-    print(f"✓ GraspPlanner 创建成功")
+    # planner = GraspPlanner(state, model, data, "bottle", hand_body_prefix='lh_')
+    # print(f"✓ GraspPlanner 创建成功")
     
     # 创建 GraspControl
-    grasp_ctrl = GraspControl(model, data, planner)
+    grasp_ctrl = GraspControl(model, data)
     print(f"✓ GraspControl 创建成功")
 
     print("act_names")

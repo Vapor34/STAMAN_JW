@@ -41,21 +41,7 @@ def apply_fixed_joint_angles(model, data, _fixed_cache={}):
 
 def qpos_to_ctrl(model, planner, target_pose):
     """
-    【协同变量 → 关节角度】将规划的9D状态转换为23个执行器的控制信号
-    
-    【映射关系】
-    • 四指 J3 弯曲：grasp_val ∈ [0,1] → 角度 ∈ [0, 1.571] rad
-    • 四指 J4 侧摆：spread_val ∈ [-0.2, 0.3] → 直接用（已在范围内）
-    • 大拇指关节：grasp_val ∈ [0,1] → 各关节按系数映射
-    • 腱执行器（J1、J2被动耦联）：grasp_val ∈ [0,1] → 张力 ∈ [0, 3.14]
-
-    Args:
-        model: MuJoCo模型
-        planner: 规划器（含执行器分类信息）
-        target_pose: 9D数组 [x, y, z, qw, qx, qy, qz, grasp, spread]
-    
-    Returns:
-        ctrl_cmd: 23维控制信号向量，逐一对应model.nu个执行器
+ 
     """
     # ===== 参数配置 =====
     FLEX_MAX_ANGLE = 1.571          # 四指J3最大弯曲角度 (rad)
