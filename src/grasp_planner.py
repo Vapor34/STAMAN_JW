@@ -17,7 +17,7 @@ from src.grasp_state import StateStruct
 def get_tendon_actuator_map(model):
     """
     建立 腱名称 到 执行器控制索引 的映射表
-    tendon_to_actuator={腱名称: 执行器控制索引}
+    tendon_to_actuator={tendon_name: actuator_index}
     """
     tendon_to_actuator = {}
     
@@ -55,15 +55,16 @@ def get_synergy_mapping(model, hand_prefix):
       - 食指 J3 (lh_FFJ3)、中指 J3 (lh_MFJ3)、无名指 J3 (lh_RFJ3)、小指 J3 (lh_LFJ3)
       - 食指 J4 (lh_FFJ4)、中指 J4 (lh_MFJ4)、无名指 J4 (lh_RFJ4)、小指 J4 (lh_LFJ4)
       - 大拇指所有关节 (THJ1-5)
+      - 小指 J5 (lh_LFJ5)
       - 手腕 (WRJ1-2)
     
     ✗ 被动关节（无执行器）:
       - 四指 J1、J2 (被忽略)
-      - 小指 J5 (lh_LFJ5) (被忽略)
     """
     flex_indices = [] 
     abd_indices = [] 
     thumb_indices = []
+    wrist_indices = []
     tendon_indices = []
 
     jnt_map = {} # 关节名称 → qpos地址
@@ -95,13 +96,19 @@ def get_synergy_mapping(model, hand_prefix):
             qpos_adr = jnt_map[jnt_name]
             thumb_indices.append(qpos_adr)
     
+    # 【手腕】控制关节
+    wrist_names = ['lh_WRJ1', 'lh_WRJ2']
+    for jnt_name in wrist_names:
+        if jnt_name in jnt_map:
+            qpos_adr = jnt_map[jnt_name]
+            wrist_indices.append(qpos_adr)
+    
     # 【被忽略的关节】被动关节（无执行器）
     ignored_names = [
         'lh_FFJ1', 'lh_FFJ2',  # 食指
         'lh_MFJ1', 'lh_MFJ2',  # 中指
         'lh_RFJ1', 'lh_RFJ2',  # 无名指
-        'lh_LFJ1', 'lh_LFJ2', 'lh_LFJ5',  # 小指
-        'lh_WRJ1', 'lh_WRJ2'   # 手腕（可以添加如需要）
+        'lh_LFJ1', 'lh_LFJ2',  # 小指 J1, J2 (被动)
     ]
     for jnt_name in ignored_names:
         if jnt_name in jnt_map:
@@ -116,7 +123,7 @@ def get_synergy_mapping(model, hand_prefix):
 
     
     
-    return flex_indices, abd_indices, thumb_indices
+    return flex_indices, abd_indices, thumb_indices, wrist_indices
 
 class GraspPlanner(Annealer):
     def __init__(self, state, model, data, bottle_body_name, hand_body_prefix='lh_'):
@@ -148,10 +155,10 @@ class GraspPlanner(Annealer):
                 
                 if not is_excluded:
                     self.contact_body_ids.append(i)
-                    print(f"Distance calculation includes: {name}")
+
 
         # 获取关节映射
-        self.flex_adrs, self.abd_adrs, self.thumb_adrs = get_synergy_mapping(model, hand_body_prefix)
+        self.flex_adrs, self.abd_adrs, self.thumb_adrs, self.wrist_adrs = get_synergy_mapping(model, hand_body_prefix)
         
         super(GraspPlanner, self).__init__(state)
 
