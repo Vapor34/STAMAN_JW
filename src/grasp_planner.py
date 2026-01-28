@@ -1,7 +1,7 @@
 """
 抓取规划器：使用模拟退火优化Shadow Hand的抓取姿态
 """
-l
+
 
 
 from simanneal import Annealer
@@ -225,7 +225,7 @@ class GraspPlanner(Annealer):
         self.data.qpos[3:7] = state_struct.get_quaternion()
         
         # ===== 2. 根据协同变量设置手指关节 =====
-        grasp = state_struct.grasp      # [0, 1]
+        grasp = state_struct.grasp      # [0, 1]范围待核实
         curl = state_struct.curl        # [0, 1]
         spread = state_struct.spread    # [-0.2, 0.3]
         thumb_base = state_struct.thumb_base  # [0, 1]
