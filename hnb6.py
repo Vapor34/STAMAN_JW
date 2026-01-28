@@ -9,14 +9,6 @@ from src.mujoco_utils import mujoco_load
 from src.grasp_state import StateStruct
 from src.grasp_planner import GraspPlanner, get_synergy_mapping, get_tendon_actuator_map
 
-"""
-大拇指： lh_A_THJx
-    J1:近端弯曲
-    J2:远端弯曲
-    J3:远端关节侧摆
-    J4:虎口大小（值越大，虎口越开）
-    J5:掌根关节弯曲（伴有一定旋转）
-"""
 
 #给定拇指关节角度范围，实现"C"型手势抓取瓶子
 def apply_fixed_joint_angles(model, data, _fixed_cache={}):
@@ -41,7 +33,8 @@ def apply_fixed_joint_angles(model, data, _fixed_cache={}):
 
 def qpos_to_ctrl(model, planner, target_pose):
     """
- 
+    needs revision: map target_pose (13D) to control signals for each actuator
+    13D target
     """
     # ===== 参数配置 =====
     FLEX_MAX_ANGLE = 1.571          # 四指J3最大弯曲角度 (rad)

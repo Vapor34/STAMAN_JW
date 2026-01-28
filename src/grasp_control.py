@@ -49,7 +49,17 @@ class GraspControl:
         
         # 初始化控制变量（列表表示）
         num_acts = len(self.act_name_list)
-        self.ctrl_act_list = np.zeros(num_acts)
+        self.ctrl_act_list = np.zeros(num_acts)#     for jnt_name in ignored_names:
+#         if jnt_name in jnt_map:
+#             qpos_adr = jnt_map[jnt_name]
+    
+#     # tendon_names = ["lh_FFJ0", "lh_MFJ0", "lh_RFJ0", "lh_LFJ0"]
+#     # for jnt_name in tendon_names:
+#     #     if jnt_name in jnt_map:
+#     #         qpos_adr = jnt_map[jnt_name]
+#     #         tendon_indices.append(qpos_adr)
+#     #         print(f"tendon inds: {qpos_adr}")
+
     
     def _build_act_name_to_id_mapping(self):
         self.act_name_dic = {}
