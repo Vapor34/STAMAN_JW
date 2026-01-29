@@ -15,89 +15,90 @@ from src.grasp_state import StateStruct
 from src.grasp_control import GraspControl
 
 
-def get_tendon_actuator_map(model):
-    """
-    建立 腱名称 到 执行器控制索引 的映射表
-    tendon_to_actuator={tendon_name: actuator_index}
-    """
-    tendon_to_actuator = {}
+
+# def get_tendon_actuator_map(model):
+#     """
+#     建立 腱名称 到 执行器控制索引 的映射表
+#     tendon_to_actuator={tendon_name: actuator_index}
+#     """
+#     tendon_to_actuator = {}
     
-    for act_id in range(model.nu):
-        # 判断执行器是否作用于腱 (mjTRN_TENDON = 3)
-        if model.actuator_trntype[act_id] == mujoco.mjtTrn.mjTRN_TENDON:
-            # 获取该执行器关联的 Tendon ID
-            t_id = model.actuator_trnid[act_id, 0]
-            # 获取腱的名字
-            t_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_TENDON, t_id)
-            # 记录映射
-            tendon_to_actuator[t_name] = act_id
+#     for act_id in range(model.nu):
+#         # 判断执行器是否作用于腱 (mjTRN_TENDON = 3)
+#         if model.actuator_trntype[act_id] == mujoco.mjtTrn.mjTRN_TENDON:
+#             # 获取该执行器关联的 Tendon ID
+#             t_id = model.actuator_trnid[act_id, 0]
+#             # 获取腱的名字
+#             t_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_TENDON, t_id)
+#             # 记录映射
+#             tendon_to_actuator[t_name] = act_id
             
-    return tendon_to_actuator
+#     return tendon_to_actuator
 
 
 
-def control_tendon_actuators(model, data, ctrl_value):
-    tendon_to_actuator = get_tendon_actuator_map(model)
+# def control_tendon_actuators(model, data, ctrl_value):
+#     tendon_to_actuator = get_tendon_actuator_map(model)
     
-    # 将腱执行器的控制值设置到 data.ctrl
-    for tendon_name, actuator_idx in tendon_to_actuator.items():
-        data.ctrl[actuator_idx] = ctrl_value
+#     # 将腱执行器的控制值设置到 data.ctrl
+#     for tendon_name, actuator_idx in tendon_to_actuator.items():
+#         data.ctrl[actuator_idx] = ctrl_value
 
 
 
 
-def get_synergy_mapping(model, hand_prefix="lh_"):
+# def get_synergy_mapping(model, hand_prefix="lh_"):
 
-    # stores ids of actuators for each synergy group
-    grasp_syn = [] #四指抓取，手指根部弯曲 + 手掌拱起[lh_A_FFJ3, lh_A_MFJ3, lh_A_RFJ3,lh_A_LFJ3, lh_A_LFJ5]
-    curl_syn = [] #四指弯曲，手指末端勾起，全是肌腱控制[lh_A_FFJ0, lh_A_MFJ0, lh_A_RFJ0, lh_A_LFJ0]
-    spread_syn = [] #四指侧摆，手指侧向张开[lh_A_FFJ4,lh_A_MFJ4,lh_A_RFJ4,lh_A_LFJ4]
-    thumb_base_syn = [] #拇指根部定位/对掌[lh_A_THJ5, lh_A_THJ4]
-    thumb_flex_syn = [] #拇指弯曲[lh_A_THJ3, lh_A_THJ2, lh_A_THJ1]
-    wrist_syn = [] #手腕[lh_A_WRJ1, lh_A_WRJ2]
+#     # stores ids of actuators for each synergy group
+#     grasp_syn = [] #四指抓取，手指根部弯曲 + 手掌拱起[lh_A_FFJ3, lh_A_MFJ3, lh_A_RFJ3,lh_A_LFJ3, lh_A_LFJ5]
+#     curl_syn = [] #四指弯曲，手指末端勾起，全是肌腱控制[lh_A_FFJ0, lh_A_MFJ0, lh_A_RFJ0, lh_A_LFJ0]
+#     spread_syn = [] #四指侧摆，手指侧向张开[lh_A_FFJ4,lh_A_MFJ4,lh_A_RFJ4,lh_A_LFJ4]
+#     thumb_base_syn = [] #拇指根部定位/对掌[lh_A_THJ5, lh_A_THJ4]
+#     thumb_flex_syn = [] #拇指弯曲[lh_A_THJ3, lh_A_THJ2, lh_A_THJ1]
+#     wrist_syn = [] #手腕[lh_A_WRJ1, lh_A_WRJ2]
 
 
 
-    # 辅助函数：快速获取致动器 ID
-    def get_act_id(name):
-        return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, f"{hand_prefix}A_{name}")
+#     # 辅助函数：快速获取致动器 ID
+#     def get_act_id(name):
+#         return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, f"{hand_prefix}A_{name}")
 
-    # 1. 四指抓取 (Grasp): 手指根部弯曲 (J3) + 小指掌骨拱起 (LFJ5)
-    # 作用：决定握拳的深度
-    grasp_names = ['FFJ3', 'MFJ3', 'RFJ3', 'LFJ3', 'LFJ5']
-    grasp_syn = [get_act_id(n) for n in grasp_names if get_act_id(n) != -1]
+#     # 1. 四指抓取 (Grasp): 手指根部弯曲 (J3) + 小指掌骨拱起 (LFJ5)
+#     # 作用：决定握拳的深度
+#     grasp_names = ['FFJ3', 'MFJ3', 'RFJ3', 'LFJ3', 'LFJ5']
+#     grasp_syn = [get_act_id(n) for n in grasp_names if get_act_id(n) != -1]
 
-    # 2. 四指卷曲 (Curl): 通过 Tendon 控制的 J0
-    # 作用：手指末端两个关节卷起，用于勾住物体
-    curl_names = ['FFJ0', 'MFJ0', 'RFJ0', 'LFJ0']
-    curl_syn = [get_act_id(n) for n in curl_names if get_act_id(n) != -1]
+#     # 2. 四指卷曲 (Curl): 通过 Tendon 控制的 J0
+#     # 作用：手指末端两个关节卷起，用于勾住物体
+#     curl_names = ['FFJ0', 'MFJ0', 'RFJ0', 'LFJ0']
+#     curl_syn = [get_act_id(n) for n in curl_names if get_act_id(n) != -1]
 
-    # 3. 四指侧摆 (Spread): J4 关节
-    # 作用：控制手指张开和并拢
-    spread_names = ['FFJ4', 'MFJ4', 'RFJ4', 'LFJ4']
-    spread_syn = [get_act_id(n) for n in spread_names if get_act_id(n) != -1]
+#     # 3. 四指侧摆 (Spread): J4 关节
+#     # 作用：控制手指张开和并拢
+#     spread_names = ['FFJ4', 'MFJ4', 'RFJ4', 'LFJ4']
+#     spread_syn = [get_act_id(n) for n in spread_names if get_act_id(n) != -1]
 
-    # 4. 拇指基座 (Thumb Base): 对掌与旋转 (THJ5, THJ4)
-    thumb_base_names = ['THJ5', 'THJ4']
-    thumb_base_syn = [get_act_id(n) for n in thumb_base_names if get_act_id(n) != -1]
+#     # 4. 拇指基座 (Thumb Base): 对掌与旋转 (THJ5, THJ4)
+#     thumb_base_names = ['THJ5', 'THJ4']
+#     thumb_base_syn = [get_act_id(n) for n in thumb_base_names if get_act_id(n) != -1]
 
-    # 5. 拇指弯曲 (Thumb Flex): 拇指自身卷动 (THJ3, THJ2, THJ1)
-    thumb_flex_names = ['THJ3', 'THJ2', 'THJ1']
-    thumb_flex_syn = [get_act_id(n) for n in thumb_flex_names if get_act_id(n) != -1]
+#     # 5. 拇指弯曲 (Thumb Flex): 拇指自身卷动 (THJ3, THJ2, THJ1)
+#     thumb_flex_names = ['THJ3', 'THJ2', 'THJ1']
+#     thumb_flex_syn = [get_act_id(n) for n in thumb_flex_names if get_act_id(n) != -1]
 
-    # 6. 手腕 (Wrist): 如果需要也可以分组
-    wrist_names = ['WRJ1', 'WRJ2']
-    wrist_syn = [get_act_id(n) for n in wrist_names if get_act_id(n) != -1]
+#     # 6. 手腕 (Wrist): 如果需要也可以分组
+#     wrist_names = ['WRJ1', 'WRJ2']
+#     wrist_syn = [get_act_id(n) for n in wrist_names if get_act_id(n) != -1]
 
-    # 返回一个字典，方便后续调用
-    return {
-        "grasp": grasp_syn,
-        "curl": curl_syn,
-        "spread": spread_syn,
-        "thumb_base": thumb_base_syn,
-        "thumb_flex": thumb_flex_syn,
-        "wrist": wrist_syn
-    }
+#     # 返回一个字典，方便后续调用
+#     return {
+#         "grasp": grasp_syn,
+#         "curl": curl_syn,
+#         "spread": spread_syn,
+#         "thumb_base": thumb_base_syn,
+#         "thumb_flex": thumb_flex_syn,
+#         "wrist": wrist_syn
+#     }
 
 
 # def get_synergy_mapping(model, hand_prefix):
@@ -195,7 +196,7 @@ class GraspPlanner(Annealer):
                 if not is_excluded:
                     self.contact_body_ids.append(i)
 
-        syn_map = get_synergy_mapping(model, hand_prefix=self.hand_prefix)
+        syn_map = self.act_ctrl.get_synergy_map()
         self.syn_grasp = syn_map["grasp"] #stores ids of actuators for each synergy group
         self.syn_curl = syn_map["curl"]
         self.syn_spread = syn_map["spread"]

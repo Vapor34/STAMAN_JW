@@ -50,8 +50,13 @@ class GraspControl:
         self.act_id_to_name = {v: k for k, v in self.act_name_to_id.items()}
         self.synergy_map = {
             'grasp':['lh_FFJ3', 'lh_MFJ3', 'lh_RFJ3', 'lh_LFJ3', 'lh_LFJ5'],
-            'curl':['lh_FFJ0', 'lh_MFJ0', 'lh_RFJ0', 'lh_LFJ0']
+            'curl':['lh_FFJ0', 'lh_MFJ0', 'lh_RFJ0', 'lh_LFJ0'],
+            'spread':['lh_FFJ4', 'lh_MFJ4', 'lh_RFJ4', 'lh_LFJ4'],
+            'thumb_base':['lh_THJ5', 'lh_THJ4'],
+            'thumb_flex':['lh_THJ3', 'lh_THJ2', 'lh_THJ1'],
+            'wrist':['lh_WRJ1', 'lh_WRJ2']
         }    
+
     # def _build_act_name_to_id_mapping(self):
     #     self.act_name_dic = {}
     #     for act_id in range(self.model.nu):
@@ -91,16 +96,51 @@ class GraspControl:
 
     def set_act_val(self, act_name, value):
         """set single actuator control value"""
-        for i, act_id in self.act_name_to_id.items():
-            if act_name == i:
-                self.data.ctrl[act_id] = value
+        act_id = self.act_name_to_id.get(act_name)
+        if act_id is not None:
+            self.data.ctrl[act_id] = value
+        else:
+            raise ValueError(f"Unknown actuator name: {act_name}")
             
     def get_act_val(self, act_name):
         """get single actuator control value"""
-        
-        for i, act_id in self.act_name_to_id.items():
-            if act_name == i:
-                return self.data.ctrl[act_id]
+        act_id = self.act_name_to_id.get(act_name)
+        if act_id is not None:
+            return self.data.ctrl[act_id]
         else:
-            raise ValueError(f"unknown actuator name: {act_name}")
+            raise ValueError(f"Unknown actuator name: {act_name}")
+        
+    def get_act_name(self, act_id):
+        """get single actuator name by id"""
+        act_name = self.act_id_to_name.get(act_id)
+        if act_name is not None:
+            return act_name
+        else:
+            raise ValueError(f"Unknown actuator id: {act_id}")
+        
+    def set_syn_val(self, group, value):
+        """
+        set synergy group value
+
+        haven't decided the weight of each actuator in the synergy group yet
+        """
+        if group not in self.synergy_map:
+            raise ValueError(f"Unknown synergy group: {group}")
+        act_names = self.synergy_map[group]
+        for act_name in act_names:
+            self.set_act_val(act_name, value)
+
+    def set_hand_state(self, state: StateStruct):
+        """
+        set hand state from StateStruct
+        """
+        self.set_syn_val('grasp', state.grasp_synergy)
+        self.set_syn_val('curl', state.curl_synergy)
+        self.set_syn_val('spread', state.spread_synergy)
+        self.set_syn_val('thumb_base', state.thumb_base_synergy)
+        self.set_syn_val('thumb_flex', state.thumb_flex_synergy)
+        self.set_syn_val('wrist', state.wrist_synergy)
     
+    def get_synergy_map(self):
+        """get synergy map"""
+        return self.synergy_map

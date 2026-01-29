@@ -7,7 +7,8 @@ import argparse
 
 from src.mujoco_utils import mujoco_load
 from src.grasp_state import StateStruct
-from src.grasp_planner import GraspPlanner, get_synergy_mapping, get_tendon_actuator_map
+from src.grasp_planner import GraspPlanner
+from src.grasp_control import GraspControl
 
 
 #给定拇指关节角度范围，实现"C"型手势抓取瓶子
@@ -31,59 +32,59 @@ def apply_fixed_joint_angles(model, data, _fixed_cache={}):
 
 
 
-def qpos_to_ctrl(model, planner, target_pose):
-    """
-    needs revision: map target_pose (13D) to control signals for each actuator
-    13D target
-    """
-    # ===== 参数配置 =====
-    FLEX_MAX_ANGLE = 1.571          # 四指J3最大弯曲角度 (rad)
-    THUMB_MAX_ANGLES = [1.0472, 1.22173, 0.20944, 0.698132, 1.5708]  # 各拇指关节的最大角度
-    TENDON_MAX_TENSION = 3.14       # 腱最大张力
+# def qpos_to_ctrl(model, planner, target_pose):
+#     """
+#     needs revision: map target_pose (13D) to control signals for each actuator
+#     13D target
+#     """
+#     # ===== 参数配置 =====
+#     FLEX_MAX_ANGLE = 1.571          # 四指J3最大弯曲角度 (rad)
+#     THUMB_MAX_ANGLES = [1.0472, 1.22173, 0.20944, 0.698132, 1.5708]  # 各拇指关节的最大角度
+#     TENDON_MAX_TENSION = 3.14       # 腱最大张力
     
-    # ===== 提取并归一化协同变量 =====
-    # target_pose[7] 和 [8] 已经由 StateStruct 限制在有效范围内
-    grasp_val = target_pose[7]      # [0, 1]，表示抓取强度
-    spread_val = target_pose[8]     # [-0.2, 0.3]，表示手指展开程度
+#     # ===== 提取并归一化协同变量 =====
+#     # target_pose[7] 和 [8] 已经由 StateStruct 限制在有效范围内
+#     grasp_val = target_pose[7]      # [0, 1]，表示抓取强度
+#     spread_val = target_pose[8]     # [-0.2, 0.3]，表示手指展开程度
     
-    # ===== 初始化控制信号 =====
-    ctrl_cmd = np.zeros(model.nu)
+#     # ===== 初始化控制信号 =====
+#     ctrl_cmd = np.zeros(model.nu)
     
-    # ===== 映射每个执行器 =====
-    for i in range(model.nu):
-        # 获取执行器对应的关节地址和控制范围
-        jnt_id = model.actuator_trnid[i, 0]
-        jnt_adr = model.jnt_qposadr[jnt_id]
-        ctrl_range = model.actuator_ctrlrange[i]
+#     # ===== 映射每个执行器 =====
+#     for i in range(model.nu):
+#         # 获取执行器对应的关节地址和控制范围
+#         jnt_id = model.actuator_trnid[i, 0]
+#         jnt_adr = model.jnt_qposadr[jnt_id]
+#         ctrl_range = model.actuator_ctrlrange[i]
         
-        # 根据关节类型计算目标角度
-        if jnt_adr in planner.flex_adrs:
-            # 【四指弯曲 J3】：grasp_val [0,1] → 角度 [0, FLEX_MAX_ANGLE]
-            val = grasp_val * FLEX_MAX_ANGLE
+#         # 根据关节类型计算目标角度
+#         if jnt_adr in planner.flex_adrs:
+#             # 【四指弯曲 J3】：grasp_val [0,1] → 角度 [0, FLEX_MAX_ANGLE]
+#             val = grasp_val * FLEX_MAX_ANGLE
             
-        elif jnt_adr in planner.thumb_adrs:
-            # 【大拇指】：grasp_val [0,1] → 各关节按对应系数映射
-            thumb_idx = planner.thumb_adrs.index(jnt_adr)
-            max_angle = THUMB_MAX_ANGLES[thumb_idx] if thumb_idx < len(THUMB_MAX_ANGLES) else 0.8
-            val = grasp_val * max_angle
+#         elif jnt_adr in planner.thumb_adrs:
+#             # 【大拇指】：grasp_val [0,1] → 各关节按对应系数映射
+#             thumb_idx = planner.thumb_adrs.index(jnt_adr)
+#             max_angle = THUMB_MAX_ANGLES[thumb_idx] if thumb_idx < len(THUMB_MAX_ANGLES) else 0.8
+#             val = grasp_val * max_angle
             
-        elif jnt_adr in planner.abd_adrs:
-            # 【四指侧摆 J4】：spread_val 已在 [-0.2, 0.3] 范围，直接使用
-            val = spread_val
-        else:
-            # 其他执行器（未分类）设为0
-            val = 0.0
+#         elif jnt_adr in planner.abd_adrs:
+#             # 【四指侧摆 J4】：spread_val 已在 [-0.2, 0.3] 范围，直接使用
+#             val = spread_val
+#         else:
+#             # 其他执行器（未分类）设为0
+#             val = 0.0
         
-        # 严格按执行器的控制范围裁剪
-        ctrl_cmd[i] = np.clip(val, ctrl_range[0], ctrl_range[1])
+#         # 严格按执行器的控制范围裁剪
+#         ctrl_cmd[i] = np.clip(val, ctrl_range[0], ctrl_range[1])
     
-    # ===== 设置腱执行器的张力 =====
-    tendon_actuator_map = get_tendon_actuator_map(model)
-    for tendon_name, actuator_idx in tendon_actuator_map.items():
-        # 腱张力由 grasp_val 控制：grasp增加时腱张力增加，推动J1、J2联动弯曲
-        ctrl_cmd[actuator_idx] = grasp_val * TENDON_MAX_TENSION
+#     # ===== 设置腱执行器的张力 =====
+#     tendon_actuator_map = get_tendon_actuator_map(model)
+#     for tendon_name, actuator_idx in tendon_actuator_map.items():
+#         # 腱张力由 grasp_val 控制：grasp增加时腱张力增加，推动J1、J2联动弯曲
+#         ctrl_cmd[actuator_idx] = grasp_val * TENDON_MAX_TENSION
     
-    return ctrl_cmd
+#     return ctrl_cmd
 
 
 def parse_args():
@@ -98,13 +99,12 @@ rng = np.random.default_rng(seed=42)
 if __name__ == "__main__":
     args = parse_args()
     model, data = mujoco_load(args.model_path)
+    controler = GraspControl(model, data)
 
     # 初始状态 - 使用 StateStruct
     initial_state = StateStruct(
         position=[0.4, 0.4, 0.3],
-        quaternion=[1.0, 0.0, 0.0, 0.0],
-        grasp=0.0,
-        spread=0.0
+        quaternion=[1.0, 0.0, 0.0, 0.0]
     )
     initial_guess = initial_state.to_array()
 
@@ -184,7 +184,7 @@ if __name__ == "__main__":
 
 
                 # 设置关节执行器的控制信号
-                joint_ctrl = qpos_to_ctrl(model, planner, exec_state.to_array())
+                joint_ctrl = controler.set_hand_state(exec_state)
                 data.ctrl = joint_ctrl
                 
                 mujoco.mj_step(model, data)

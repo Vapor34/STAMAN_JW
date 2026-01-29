@@ -223,7 +223,7 @@ class StateStruct:
         self._normalize_quaternion()
 
         self.grasp_synergy = np.clip(arr[7], 0.0, 1.0)
-        self.grasp_curl = np.clip(arr[8], 0.0, 1.0)
+        self.curl_synergy = np.clip(arr[8], 0.0, 1.0)
         self.spread_synergy = np.clip(arr[9], -0.2, 0.3)
         self.thumb_base_synergy = np.clip(arr[10], 0.0, 1.0)
         self.thumb_flex_synergy = np.clip(arr[11], 0.0, 1.0)
