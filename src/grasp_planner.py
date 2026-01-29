@@ -270,9 +270,19 @@ class GraspPlanner(Annealer):
         current.grasp += np.random.normal(0, 0.08)
         current.grasp = np.clip(current.grasp, 0.0, 1.0)  # 改为允许完整 [0, 1] 范围
 
+        current.curl += np.random.normal(0, 0.05)
+        current.curl = np.clip(current.curl, 0.0, 1.0)
+
         # 展开程度扰动
         current.spread += np.random.normal(0, 0.05)
         current.spread = np.clip(current.spread, -0.2, 0.3)
+
+        current.thumb_base += np.random.normal(0, 0.05)
+        current.thumb_base = np.clip(current.thumb_base, 0.0, 1.0)
+
+        current.thumb_flex += np.random.normal(0, 0.05)
+        current.thumb_flex = np.clip(current.thumb_flex, 0.0, 1.0)
+
         
         # 转换回数组供 Annealer 使用
         self.state = current.to_array()

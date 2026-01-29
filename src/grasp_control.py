@@ -106,6 +106,7 @@ class GraspControl:
         """get single actuator control value"""
         act_id = self.act_name_to_id.get(act_name)
         if act_id is not None:
+            print(f"value now: {self.data.ctrl[act_id]} ")
             return self.data.ctrl[act_id]
         else:
             raise ValueError(f"Unknown actuator name: {act_name}")
@@ -144,3 +145,13 @@ class GraspControl:
     def get_synergy_map(self):
         """get synergy map"""
         return self.synergy_map
+    
+    def print_all_act_val(self):
+        """print all actuator control values"""
+        print("\n【当前执行器控制值】")
+        for group, act_names in self.synergy_map.items():
+            print(f"  Synergy Group: {group}")
+            for act_name in act_names:
+                act_id = self.act_name_to_id[act_name]
+                act_val = self.data.ctrl[act_id]
+                print(f"    {act_name}: {act_val:.4f}")

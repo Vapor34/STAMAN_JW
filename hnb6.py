@@ -11,24 +11,24 @@ from src.grasp_planner import GraspPlanner
 from src.grasp_control import GraspControl
 
 
-#给定拇指关节角度范围，实现"C"型手势抓取瓶子
-def apply_fixed_joint_angles(model, data, _fixed_cache={}):
-    """
-    仅在第一次执行时生成随机角度，后续调用将直接应用缓存的值。
-    """
-    # 1. 检查缓存是否为空（即是否为第一次运行）
-    if not _fixed_cache:
-        rng = np.random.default_rng(seed=42)
-        _fixed_cache['lh_THJ5'] = np.clip(rng.normal(0.5, 0.015), -1.05, 1.05)
-        _fixed_cache['lh_THJ4'] = np.clip(rng.normal(1.0, 0.015), 0, 1.22)
+# #给定拇指关节角度范围，实现"C"型手势抓取瓶子
+# def apply_fixed_joint_angles(model, data, _fixed_cache={}):
+#     """
+#     仅在第一次执行时生成随机角度，后续调用将直接应用缓存的值。
+#     """
+#     # 1. 检查缓存是否为空（即是否为第一次运行）
+#     if not _fixed_cache:
+#         rng = np.random.default_rng(seed=42)
+#         _fixed_cache['lh_THJ5'] = np.clip(rng.normal(0.5, 0.015), -1.05, 1.05)
+#         _fixed_cache['lh_THJ4'] = np.clip(rng.normal(1.0, 0.015), 0, 1.22)
         
-    # 2. 遍历模型关节并应用
-    for jnt_id in range(model.njnt):
-        jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, jnt_id)
-        if jnt_name in _fixed_cache:
-            joint_addr = model.jnt_qposadr[jnt_id]
-            # 强制覆盖 qpos
-            data.qpos[joint_addr] = _fixed_cache[jnt_name]
+#     # 2. 遍历模型关节并应用
+#     for jnt_id in range(model.njnt):
+#         jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, jnt_id)
+#         if jnt_name in _fixed_cache:
+#             joint_addr = model.jnt_qposadr[jnt_id]
+#             # 强制覆盖 qpos
+#             data.qpos[joint_addr] = _fixed_cache[jnt_name]
 
 
 
@@ -167,25 +167,24 @@ if __name__ == "__main__":
                     position=target_state.get_position(),
                     quaternion=target_state.get_quaternion(),
                     grasp=current_grasp_val,
-                    spread=target_state.spread
+                    curl=target_state.curl,
+                    spread=target_state.spread,
+                    thumb_base=target_state.thumb_base,
+                    thumb_flex=target_state.thumb_flex,
                 )
 
 
                 # =====特定关节的固定角度（可选覆盖） =====
                 # 如果需要固定某些拇指关节的角度，在这里指定
-                
-                apply_fixed_joint_angles(model, data)
-
-
-
+                controler.set_act_val('lh_THJ5', 0.5)  # 拇指末端关节
+                controler.set_act_val('lh_THJ4', 1.0)  # 拇指近端关节
                 # ====================================
-
-
-
+                
 
                 # 设置关节执行器的控制信号
-                joint_ctrl = controler.set_hand_state(exec_state)
-                data.ctrl = joint_ctrl
+                controler.set_hand_state(exec_state)
+                controler.print_all_act_val()
+                
                 
                 mujoco.mj_step(model, data)
 
