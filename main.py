@@ -79,19 +79,26 @@ if __name__ == "__main__":
                 if anim_time > grasp_start_time:
                     grasp_progress = (anim_time - grasp_start_time) / grasp_duration
                     grasp_progress = np.clip(grasp_progress, 0.0, 1.0)
+                    
                     current_grasp_val = target_state.grasp * grasp_progress
+                    current_curl = target_state.curl * grasp_progress
+                    current_thumb_flex = target_state.thumb_flex * grasp_progress
                 else:
                     current_grasp_val = 0.0
+                    current_curl = 0.0
+                    current_thumb_base = 0.0
+                    current_thumb_flex = 0.0
+                    
 
                 # 构造当前执行状态用于计算控制命令
                 exec_state = StateStruct(
                     position=target_state.get_position(),
                     quaternion=target_state.get_quaternion(),
                     grasp=current_grasp_val,
-                    curl=target_state.curl,
+                    curl=current_curl,
                     spread=target_state.spread,
                     thumb_base=target_state.thumb_base,
-                    thumb_flex=target_state.thumb_flex,
+                    thumb_flex=current_thumb_flex,
                 )
 
 
