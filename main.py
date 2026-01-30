@@ -101,17 +101,15 @@ if __name__ == "__main__":
                     thumb_flex=current_thumb_flex,
                 )
 
+                # 设置关节执行器的控制信号
+                controler.set_hand_state(exec_state)
+                # controler.print_all_act_val()
 
                 # =====特定关节的固定角度（可选覆盖） =====
                 # 如果需要固定某些拇指关节的角度，在这里指定
                 controler.set_act_val('lh_THJ5', 0.5)  # 拇指末端关节
                 controler.set_act_val('lh_THJ4', 1.0)  # 拇指近端关节
                 # ====================================
-                
-
-                # 设置关节执行器的控制信号
-                controler.set_hand_state(exec_state)
-                controler.print_all_act_val()
                 
                 
                 mujoco.mj_step(model, data)
