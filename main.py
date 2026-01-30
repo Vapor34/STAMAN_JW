@@ -77,14 +77,16 @@ if __name__ == "__main__":
                 grasp_duration = 2.0
                 
                 if anim_time > grasp_start_time:
+                    # after 1.0s 
                     grasp_progress = (anim_time - grasp_start_time) / grasp_duration
                     grasp_progress = np.clip(grasp_progress, 0.0, 1.0)
                     
-                    current_grasp_val = target_state.grasp * grasp_progress
+                    current_grasp = target_state.grasp * grasp_progress
                     current_curl = target_state.curl * grasp_progress
                     current_thumb_flex = target_state.thumb_flex * grasp_progress
                 else:
-                    current_grasp_val = 0.0
+                    # 0-1s
+                    current_grasp = 0.0
                     current_curl = 0.0
                     current_thumb_base = 0.0
                     current_thumb_flex = 0.0
@@ -94,7 +96,7 @@ if __name__ == "__main__":
                 exec_state = StateStruct(
                     position=target_state.get_position(),
                     quaternion=target_state.get_quaternion(),
-                    grasp=current_grasp_val,
+                    grasp=current_grasp,
                     curl=current_curl,
                     spread=target_state.spread,
                     thumb_base=target_state.thumb_base,
@@ -107,10 +109,11 @@ if __name__ == "__main__":
 
                 # =====特定关节的固定角度（可选覆盖） =====
                 # 如果需要固定某些拇指关节的角度，在这里指定
-                controler.set_act_val('lh_THJ5', 0.5)  # 拇指末端关节
                 controler.set_act_val('lh_THJ4', 1.0)  # 拇指近端关节
                 # ====================================
                 
+                if anim_time == 4.0:
+                    controler.print_all_act_val()
                 
                 mujoco.mj_step(model, data)
 
