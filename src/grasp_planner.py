@@ -1,9 +1,6 @@
 """
 抓取规划器：使用模拟退火优化Shadow Hand的抓取姿态
 """
-
-
-
 from simanneal import Annealer
 import mujoco
 import mujoco.viewer
@@ -15,158 +12,6 @@ from src.grasp_state import StateStruct
 from src.grasp_control import GraspControl
 
 
-
-# def get_tendon_actuator_map(model):
-#     """
-#     建立 腱名称 到 执行器控制索引 的映射表
-#     tendon_to_actuator={tendon_name: actuator_index}
-#     """
-#     tendon_to_actuator = {}
-    
-#     for act_id in range(model.nu):
-#         # 判断执行器是否作用于腱 (mjTRN_TENDON = 3)
-#         if model.actuator_trntype[act_id] == mujoco.mjtTrn.mjTRN_TENDON:
-#             # 获取该执行器关联的 Tendon ID
-#             t_id = model.actuator_trnid[act_id, 0]
-#             # 获取腱的名字
-#             t_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_TENDON, t_id)
-#             # 记录映射
-#             tendon_to_actuator[t_name] = act_id
-            
-#     return tendon_to_actuator
-
-
-
-# def control_tendon_actuators(model, data, ctrl_value):
-#     tendon_to_actuator = get_tendon_actuator_map(model)
-    
-#     # 将腱执行器的控制值设置到 data.ctrl
-#     for tendon_name, actuator_idx in tendon_to_actuator.items():
-#         data.ctrl[actuator_idx] = ctrl_value
-
-
-
-
-# def get_synergy_mapping(model, hand_prefix="lh_"):
-
-#     # stores ids of actuators for each synergy group
-#     grasp_syn = [] #四指抓取，手指根部弯曲 + 手掌拱起[lh_A_FFJ3, lh_A_MFJ3, lh_A_RFJ3,lh_A_LFJ3, lh_A_LFJ5]
-#     curl_syn = [] #四指弯曲，手指末端勾起，全是肌腱控制[lh_A_FFJ0, lh_A_MFJ0, lh_A_RFJ0, lh_A_LFJ0]
-#     spread_syn = [] #四指侧摆，手指侧向张开[lh_A_FFJ4,lh_A_MFJ4,lh_A_RFJ4,lh_A_LFJ4]
-#     thumb_base_syn = [] #拇指根部定位/对掌[lh_A_THJ5, lh_A_THJ4]
-#     thumb_flex_syn = [] #拇指弯曲[lh_A_THJ3, lh_A_THJ2, lh_A_THJ1]
-#     wrist_syn = [] #手腕[lh_A_WRJ1, lh_A_WRJ2]
-
-
-
-#     # 辅助函数：快速获取致动器 ID
-#     def get_act_id(name):
-#         return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, f"{hand_prefix}A_{name}")
-
-#     # 1. 四指抓取 (Grasp): 手指根部弯曲 (J3) + 小指掌骨拱起 (LFJ5)
-#     # 作用：决定握拳的深度
-#     grasp_names = ['FFJ3', 'MFJ3', 'RFJ3', 'LFJ3', 'LFJ5']
-#     grasp_syn = [get_act_id(n) for n in grasp_names if get_act_id(n) != -1]
-
-#     # 2. 四指卷曲 (Curl): 通过 Tendon 控制的 J0
-#     # 作用：手指末端两个关节卷起，用于勾住物体
-#     curl_names = ['FFJ0', 'MFJ0', 'RFJ0', 'LFJ0']
-#     curl_syn = [get_act_id(n) for n in curl_names if get_act_id(n) != -1]
-
-#     # 3. 四指侧摆 (Spread): J4 关节
-#     # 作用：控制手指张开和并拢
-#     spread_names = ['FFJ4', 'MFJ4', 'RFJ4', 'LFJ4']
-#     spread_syn = [get_act_id(n) for n in spread_names if get_act_id(n) != -1]
-
-#     # 4. 拇指基座 (Thumb Base): 对掌与旋转 (THJ5, THJ4)
-#     thumb_base_names = ['THJ5', 'THJ4']
-#     thumb_base_syn = [get_act_id(n) for n in thumb_base_names if get_act_id(n) != -1]
-
-#     # 5. 拇指弯曲 (Thumb Flex): 拇指自身卷动 (THJ3, THJ2, THJ1)
-#     thumb_flex_names = ['THJ3', 'THJ2', 'THJ1']
-#     thumb_flex_syn = [get_act_id(n) for n in thumb_flex_names if get_act_id(n) != -1]
-
-#     # 6. 手腕 (Wrist): 如果需要也可以分组
-#     wrist_names = ['WRJ1', 'WRJ2']
-#     wrist_syn = [get_act_id(n) for n in wrist_names if get_act_id(n) != -1]
-
-#     # 返回一个字典，方便后续调用
-#     return {
-#         "grasp": grasp_syn,
-#         "curl": curl_syn,
-#         "spread": spread_syn,
-#         "thumb_base": thumb_base_syn,
-#         "thumb_flex": thumb_flex_syn,
-#         "wrist": wrist_syn
-#     }
-
-
-# def get_synergy_mapping(model, hand_prefix):
-
-#     flex_indices = [] 
-#     abd_indices = [] 
-#     thumb_indices = []
-#     wrist_indices = []
-#     tendon_indices = []
-
-#     jnt_map = {} # 关节名称 → qpos地址
-#     for i in range(model.njnt):
-#         jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
-#         if jnt_name:
-#             jnt_map[jnt_name] = model.jnt_qposadr[i]
-
-
-
-#     # 【四指弯曲】仅 J3（有执行器的远端关节）
-#     flex_j3_names = ['lh_FFJ3', 'lh_MFJ3', 'lh_RFJ3', 'lh_LFJ3']
-#     for jnt_name in flex_j3_names:
-#         if jnt_name in jnt_map:
-#             qpos_adr = jnt_map[jnt_name]
-#             flex_indices.append(qpos_adr)
-    
-#     # 【侧摆】J4（四指的侧摆关节）
-#     abd_j4_names = ['lh_FFJ4', 'lh_MFJ4', 'lh_RFJ4', 'lh_LFJ4']
-#     for jnt_name in abd_j4_names:
-#         if jnt_name in jnt_map:
-#             qpos_adr = jnt_map[jnt_name]
-#             abd_indices.append(qpos_adr)
-    
-#     # 【大拇指】所有关节
-#     thumb_names = ['lh_THJ1', 'lh_THJ2', 'lh_THJ3', 'lh_THJ4', 'lh_THJ5']
-#     for jnt_name in thumb_names:
-#         if jnt_name in jnt_map:
-#             qpos_adr = jnt_map[jnt_name]
-#             thumb_indices.append(qpos_adr)
-    
-#     # 【手腕】控制关节
-#     wrist_names = ['lh_WRJ1', 'lh_WRJ2']
-#     for jnt_name in wrist_names:
-#         if jnt_name in jnt_map:
-#             qpos_adr = jnt_map[jnt_name]
-#             wrist_indices.append(qpos_adr)
-    
-#     # 【被忽略的关节】被动关节（无执行器）
-#     ignored_names = [
-#         'lh_FFJ1', 'lh_FFJ2',  # 食指
-#         'lh_MFJ1', 'lh_MFJ2',  # 中指
-#         'lh_RFJ1', 'lh_RFJ2',  # 无名指
-#         'lh_LFJ1', 'lh_LFJ2',  # 小指 J1, J2 (被动)
-#     ]
-#     for jnt_name in ignored_names:
-#         if jnt_name in jnt_map:
-#             qpos_adr = jnt_map[jnt_name]
-    
-#     # tendon_names = ["lh_FFJ0", "lh_MFJ0", "lh_RFJ0", "lh_LFJ0"]
-#     # for jnt_name in tendon_names:
-#     #     if jnt_name in jnt_map:
-#     #         qpos_adr = jnt_map[jnt_name]
-#     #         tendon_indices.append(qpos_adr)
-#     #         print(f"tendon inds: {qpos_adr}")
-
-    
-    
-#     return flex_indices, abd_indices, thumb_indices, wrist_indices
-
 class GraspPlanner(Annealer):
     def __init__(self, state, model, data, bottle_body_name, hand_body_prefix='lh_'):
         self.model = model
@@ -174,17 +19,17 @@ class GraspPlanner(Annealer):
         self.hand_prefix = hand_body_prefix
         self.act_ctrl = GraspControl(model, data)
 
-        # 获取对象 ID
+        # get body and geom ids for bottle
         self.bottle_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, bottle_body_name)
         self.bottle_geom_ids = self._get_geoms_id_of_body(self.bottle_body_id)
         
-        # 获取地面几何 ID
+        # get floor geom id
         geom_name = "floor"
         self.floor_geom_id = model.geom(geom_name).id
 
         self.palm_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"{self.hand_prefix}palm")
-        self.hand_geom_ids = [] #all hand geoms for collision checking
-
+    
+        self.hand_geom_ids = [] #all hand geoms (for collision checking
         self.contact_body_ids = [] #body ids for contact distance checking
         excluded_keywords = ['wrist', 'forearm']
         for i in range(model.nbody):
@@ -226,14 +71,7 @@ class GraspPlanner(Annealer):
         self.data.qpos[3:7] = state_struct.get_quaternion()
         
         # ===== 2. 根据协同变量设置手指关节 =====
-        grasp = state_struct.grasp      # [0, 1]范围待核实
-        curl = state_struct.curl        # [0, 1]
-        spread = state_struct.spread    # [-0.2, 0.3]
-        thumb_base = state_struct.thumb_base  # [0, 1]
-        thumb_flex = state_struct.thumb_flex  # [0, 1]
-        wrist = state_struct.wrist      # [0, 1]
-
-        
+        self.act_ctrl.set_hand_state(state_struct)
         
         
         # ===== 3. 执行前向运动学计算 =====
@@ -256,7 +94,7 @@ class GraspPlanner(Annealer):
         else:
             # 朝向物体移动
             bottle_pos = self.data.xpos[self.bottle_body_id]
-            palm_pos = self.data.xpos[self.palm_body_id]
+            palm_pos = self.data.xpos[self.palm_body_id]+ np.array([0.0, 0.0, -0.03])  
             direction = bottle_pos - palm_pos
             dist = np.linalg.norm(direction)
             if dist > 1e-6:
@@ -283,6 +121,7 @@ class GraspPlanner(Annealer):
         current.thumb_flex += np.random.normal(0, 0.05)
         current.thumb_flex = np.clip(current.thumb_flex, 0.0, 1.0)
 
+        self.set_hand_pose(current)
         
         # 转换回数组供 Annealer 使用
         self.state = current.to_array()
@@ -306,16 +145,19 @@ class GraspPlanner(Annealer):
         GRASP_TARGET = 1        # 目标抓取力度（偏好值）
         COLLISION_THRESHOLD = -0.005  # 碰撞判定阈值(m)，<0为穿透
         
-        # 将9D数组转换为StateStruct
+        # 将13D数组转换为StateStruct
         state_struct = StateStruct()
         state_struct.from_array(self.state)
-        self.set_hand_pose(state_struct)
+        # self.set_hand_pose(state_struct)
         
         # ===== 1. 接近性能量：手指到物体的平均距离 =====
         bottle_pos = self.data.xpos[self.bottle_body_id]
         total_dist = 0.0
         for b_id in self.contact_body_ids:
-            dist = np.linalg.norm(self.data.xpos[b_id] - bottle_pos)
+            if b_id == self.palm_body_id:
+                dist = np.linalg.norm(self.data.xpos[b_id] + np.array([0.0, 0.0, -0.03]) - bottle_pos)
+            else:
+                dist = np.linalg.norm(self.data.xpos[b_id] - bottle_pos)
             total_dist += dist
         proximity_energy = total_dist / len(self.contact_body_ids)
         

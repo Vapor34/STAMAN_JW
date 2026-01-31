@@ -112,7 +112,7 @@ if __name__ == "__main__":
                 controler.set_act_val('lh_THJ4', 1.0)  # 拇指近端关节
                 # ====================================
                 
-                if anim_time == 4.0:
+                if anim_time < 4.0 and anim_time >3.0:
                     controler.print_all_act_val()
                 
                 mujoco.mj_step(model, data)
