@@ -29,7 +29,7 @@ if __name__ == "__main__":
         position=[0.4, 0.4, 0.3],
         quaternion=[1.0, 0.0, 0.0, 0.0]
     )
-    initial_guess = initial_state.to_array()
+    initial_guess = initial_state
 
     planner = GraspPlanner(initial_guess, model, data, bottle_body_name='bottle_body')
     planner.steps = 5000
@@ -49,7 +49,7 @@ if __name__ == "__main__":
                 print("\n[状态] 正在规划最佳抓取点...")
                 
                 # 从初始状态开始扰动
-                planner.state = initial_guess.copy()
+                planner.state = initial_guess.copy().to_array()
                 planner.state[0:3] += np.random.uniform(-0.05, 0.05, 3)
                 best_pose, energy = planner.anneal()
 
@@ -116,7 +116,7 @@ if __name__ == "__main__":
                 controler.set_act_val('lh_THJ4', 1.0)  # 拇指近端关节
                 # ====================================
                 
-                if anim_time < 4.0 and anim_time >3.0:
+                if anim_time < 4.0 and anim_time >3.95:
                     controler.print_all_act_val()
                 
                 mujoco.mj_step(model, data)

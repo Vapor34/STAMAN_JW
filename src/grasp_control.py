@@ -7,6 +7,7 @@ two representations are provided:
 2. (Structured)act_name_dic:{act_name:act_index, ...}
 
 two main methods are provided:
+- set_synergy_map(map): change the synergy method
 - get_act_name_list(): get actuator name list
 - get_act_name_dic(): get actuator name dictionary
 - set_act_val(joint_name, value): set single joint control value
@@ -65,34 +66,10 @@ class GraspControl:
             if jnt_name is not None:
                 low, high = self.model.jnt_range[i]
                 self.joint_range[jnt_name] = (low, high)
-                
 
+    def set_synergy_map(self, map):
+        self.synergy_map = map
 
-    # def _build_act_name_to_id_mapping(self):
-    #     self.act_name_dic = {}
-    #     for act_id in range(self.model.nu):
-    #     # 判断执行器是否作用于腱 (mjTRN_TENDON = 3)
-    #         if self.model.actuator_trntype[act_id] == mujoco.mjtTrn.mjTRN_TENDON:
-    #             # 获取该执行器关联的 Tendon ID
-    #             t_id = self.model.actuator_trnid[act_id, 0]
-    #             # 获取腱的名字
-    #             t_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_TENDON, t_id)
-    #             # 记录映射
-    #             self.act_name_dic[t_name] = act_id
-    #         elif self.model.actuator_trntype[act_id] == mujoco.mjtTrn.mjTRN_JOINT:
-    #             # 获取该执行器关联的 Joint ID
-    #             j_id = self.model.actuator_trnid[act_id, 0]
-    #             # 获取关节的名字
-    #             j_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, j_id)
-    #             # 记录映射
-    #             self.act_name_dic[j_name] = act_id
-    #     """OUTPUT: act_name_dic: {'lh_WRJ2': 0, 'lh_WRJ1': 1,
-    #                         'lh_THJ5': 2, 'lh_THJ4': 3, 'lh_THJ3': 4, 'lh_THJ2': 5, 'lh_THJ1': 6,
-    #                         'lh_FFJ4': 7, 'lh_FFJ3': 8, 'lh_FFJ0': 9, 
-    #                         'lh_MFJ4': 10, 'lh_MFJ3': 11, 'lh_MFJ0': 12, 
-    #                         'lh_RFJ4': 13, 'lh_RFJ3': 14, 'lh_RFJ0': 15, 
-    #                         'lh_LFJ5': 16, 'lh_LFJ4': 17, 'lh_LFJ3': 18, 'lh_LFJ0': 19}"""
-   
     def get_act_name_list(self):
         """get actuator name list"""
         return self.act_name_list
@@ -166,3 +143,30 @@ class GraspControl:
                 act_id = self.act_name_to_id[act_name]
                 act_val = self.data.ctrl[act_id]
                 print(f"    {act_name}: {act_val:.4f}")
+                
+
+
+    # def _build_act_name_to_id_mapping(self):
+    #     self.act_name_dic = {}
+    #     for act_id in range(self.model.nu):
+    #     # 判断执行器是否作用于腱 (mjTRN_TENDON = 3)
+    #         if self.model.actuator_trntype[act_id] == mujoco.mjtTrn.mjTRN_TENDON:
+    #             # 获取该执行器关联的 Tendon ID
+    #             t_id = self.model.actuator_trnid[act_id, 0]
+    #             # 获取腱的名字
+    #             t_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_TENDON, t_id)
+    #             # 记录映射
+    #             self.act_name_dic[t_name] = act_id
+    #         elif self.model.actuator_trntype[act_id] == mujoco.mjtTrn.mjTRN_JOINT:
+    #             # 获取该执行器关联的 Joint ID
+    #             j_id = self.model.actuator_trnid[act_id, 0]
+    #             # 获取关节的名字
+    #             j_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, j_id)
+    #             # 记录映射
+    #             self.act_name_dic[j_name] = act_id
+    #     """OUTPUT: act_name_dic: {'lh_WRJ2': 0, 'lh_WRJ1': 1,
+    #                         'lh_THJ5': 2, 'lh_THJ4': 3, 'lh_THJ3': 4, 'lh_THJ2': 5, 'lh_THJ1': 6,
+    #                         'lh_FFJ4': 7, 'lh_FFJ3': 8, 'lh_FFJ0': 9, 
+    #                         'lh_MFJ4': 10, 'lh_MFJ3': 11, 'lh_MFJ0': 12, 
+    #                         'lh_RFJ4': 13, 'lh_RFJ3': 14, 'lh_RFJ0': 15, 
+    #                         'lh_LFJ5': 16, 'lh_LFJ4': 17, 'lh_LFJ3': 18, 'lh_LFJ0': 19}"""

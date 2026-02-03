@@ -14,6 +14,9 @@ from src.grasp_control import GraspControl
 
 class GraspPlanner(Annealer):
     def __init__(self, state, model, data, bottle_body_name, hand_body_prefix='lh_'):
+        """
+        :param state: np.array type
+        """
         self.model = model
         self.data = data
         self.hand_prefix = hand_body_prefix

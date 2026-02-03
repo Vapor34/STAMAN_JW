@@ -46,7 +46,7 @@ try:
             # 创建初始状态
             state = StateStruct(model, data, position=[0.0, 0.0, 0.3], quaternion=[1.0, 0.0, 0.0, 0.0], grasp=0.5, spread=0.5)
             print(f"✓ 初始状态创建成功")
-
+            state.set_state_of_body('lh_forearm',[0,0,0,1,0,0,0])
 
 
             state.get_state_dic()

@@ -58,90 +58,6 @@ class StateStruct:
 
 
 
-    
-    def get_position(self):
-        """获取完整位置向量"""
-        return self.position.copy()
-    
-    def set_position(self, position):
-        """设置完整位置向量"""
-        self.position = np.array(position, dtype=np.float64)
-    
-
-    
-    def get_quaternion(self):
-        """获取完整四元数向量"""
-        return self.quaternion.copy()
-    
-    def set_quaternion(self, quaternion):
-        """设置完整四元数向量并归一化"""
-        self.quaternion = np.array(quaternion, dtype=np.float64)
-        self._normalize_quaternion()
-    
-    def _normalize_quaternion(self):
-        """四元数归一化"""
-        norm = np.linalg.norm(self.quaternion)
-        if norm > 1e-6:
-            self.quaternion /= norm
-    
-    
-    
-    # ===== 完整状态访问 =====
-    def to_array(self):
-        """
-        convert into 13D array [x, y, z, qw, qx, qy, qz, 
-                                grasp, curl, spread, thumb_base, thumb_flex, wrist]
-        """
-        return np.array([
-            self.position[0], self.position[1], self.position[2],
-            self.quaternion[0], self.quaternion[1], self.quaternion[2], self.quaternion[3],
-            self.grasp_synergy,
-            self.curl_synergy,
-            self.spread_synergy,
-            self.thumb_base_synergy,
-            self.thumb_flex_synergy,
-            self.wrist_synergy
-        ], dtype=np.float64)
-    
-    def from_array(self, arr):
-        """
-        load from 13D array
-        """
-        if len(arr) != 13:
-            raise ValueError(f"Expected 13D array, got {len(arr)}D")
-        self.position = np.array(arr[0:3], dtype=np.float64)
-        self.quaternion = np.array(arr[3:7], dtype=np.float64)
-        self._normalize_quaternion()
-
-        self.grasp_synergy = np.clip(arr[7], 0.0, 1.0)
-        self.curl_synergy = np.clip(arr[8], 0.0, 1.0)
-        self.spread_synergy = np.clip(arr[9], -0.2, 0.3)
-        self.thumb_base_synergy = np.clip(arr[10], 0.0, 1.0)
-        self.thumb_flex_synergy = np.clip(arr[11], 0.0, 1.0)
-        self.wrist_synergy = np.clip(arr[12], 0.0, 1.0)
-    
-    def copy(self):
-        """
-        深拷贝当前状态
-        
-        Returns:
-            StateStruct: 新的状态对象
-        """
-        return StateStruct(
-            self.model,
-            self.data,
-            position=self.position.copy(),
-            quaternion=self.quaternion.copy(),
-            grasp=self.grasp_synergy,
-            curl=self.curl_synergy,
-            spread=self.spread_synergy,
-            thumb_base=self.thumb_base_synergy,
-            thumb_flex=self.thumb_flex_synergy,
-            wrist=self.wrist_synergy
-        )
-    
-
-
     # ===== 位置访问 =====
     @property
     def x(self):
@@ -172,8 +88,16 @@ class StateStruct:
     def z(self, value):
         """设置Z坐标"""
         self.position[2] = value
-
-        # ===== 姿态访问 =====
+    
+    def get_position(self):
+        """获取完整位置向量"""
+        return self.position.copy()
+    
+    def set_position(self, position):
+        """设置完整位置向量"""
+        self.position = np.array(position, dtype=np.float64)
+    
+    # ===== 姿态访问 =====
     @property
     def qw(self):
         """获取四元数W分量"""
@@ -217,7 +141,22 @@ class StateStruct:
         """设置四元数Z分量"""
         self.quaternion[3] = value
         self._normalize_quaternion()
-
+    
+    def get_quaternion(self):
+        """获取完整四元数向量"""
+        return self.quaternion.copy()
+    
+    def set_quaternion(self, quaternion):
+        """设置完整四元数向量并归一化"""
+        self.quaternion = np.array(quaternion, dtype=np.float64)
+        self._normalize_quaternion()
+    
+    def _normalize_quaternion(self):
+        """四元数归一化"""
+        norm = np.linalg.norm(self.quaternion)
+        if norm > 1e-6:
+            self.quaternion /= norm
+    
     # ===== 协同变量访问 =====
     @property
     def grasp(self):
@@ -278,6 +217,60 @@ class StateStruct:
     def wrist(self, value):
         """设置手腕弯曲程度 [0, 1]"""
         self.wrist_synergy = np.clip(value, 0.0, 1.0)
+    
+    # ===== 完整状态访问 =====
+    def to_array(self):
+        """
+        convert into 13D array [x, y, z, qw, qx, qy, qz, 
+                                grasp, curl, spread, thumb_base, thumb_flex, wrist]
+        """
+        return np.array([
+            self.position[0], self.position[1], self.position[2],
+            self.quaternion[0], self.quaternion[1], self.quaternion[2], self.quaternion[3],
+            self.grasp_synergy,
+            self.curl_synergy,
+            self.spread_synergy,
+            self.thumb_base_synergy,
+            self.thumb_flex_synergy,
+            self.wrist_synergy
+        ], dtype=np.float64)
+    
+    def from_array(self, arr):
+        """
+        load from 13D array
+        """
+        if len(arr) != 13:
+            raise ValueError(f"Expected 13D array, got {len(arr)}D")
+        self.position = np.array(arr[0:3], dtype=np.float64)
+        self.quaternion = np.array(arr[3:7], dtype=np.float64)
+        self._normalize_quaternion()
+
+        self.grasp_synergy = np.clip(arr[7], 0.0, 1.0)
+        self.curl_synergy = np.clip(arr[8], 0.0, 1.0)
+        self.spread_synergy = np.clip(arr[9], -0.2, 0.3)
+        self.thumb_base_synergy = np.clip(arr[10], 0.0, 1.0)
+        self.thumb_flex_synergy = np.clip(arr[11], 0.0, 1.0)
+        self.wrist_synergy = np.clip(arr[12], 0.0, 1.0)
+    
+    def copy(self):
+        """
+        深拷贝当前状态
+        
+        Returns:
+            StateStruct: 新的状态对象
+        """
+        return StateStruct(
+            self.model,
+            self.data,
+            position=self.position.copy(),
+            quaternion=self.quaternion.copy(),
+            grasp=self.grasp_synergy,
+            curl=self.curl_synergy,
+            spread=self.spread_synergy,
+            thumb_base=self.thumb_base_synergy,
+            thumb_flex=self.thumb_flex_synergy,
+            wrist=self.wrist_synergy
+        )
     
     def __repr__(self):
         """字符串表示"""

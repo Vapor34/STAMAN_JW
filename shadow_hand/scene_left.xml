@@ -1,5 +1,5 @@
 <mujoco model="left_shadow_hand scene">
-  <option gravity= "0.0 0.0 0.0"/>
+  <!-- <option gravity= "0.0 0.0 0.0"/> -->
   <include file="left_hand.xml"/>
 
   <statistic extent="0.3" center="0.3 0 0"/>
