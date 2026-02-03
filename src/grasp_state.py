@@ -5,6 +5,7 @@
 """
 
 import numpy as np
+import mujoco
 
 
 class StateStruct:
@@ -19,11 +20,12 @@ class StateStruct:
         
     """
     
-    def __init__(self, position=None, quaternion=None, grasp=0.0, curl=0.0, spread=0.0, thumb_base=0.0, thumb_flex=0.0, wrist=0.0):
+    def __init__(self, model, data, position=None, quaternion=None, grasp=0.0, curl=0.0, spread=0.0, thumb_base=0.0, thumb_flex=0.0, wrist=0.0, hand_body_prefix='lh_'):
         """
         initialize StateStruct
         """
-
+        self.model = model
+        self.data = data
         self.position = np.array(position if position is not None else [0.0, 0.0, 0.0], dtype=np.float64)
         self.quaternion = np.array(quaternion if quaternion is not None else [1.0, 0.0, 0.0, 0.0], dtype=np.float64)
         self._normalize_quaternion()
@@ -34,7 +36,28 @@ class StateStruct:
         self.thumb_base_synergy = thumb_base
         self.thumb_flex_synergy = thumb_flex
         self.wrist_synergy = wrist
+        self.hand_prefix = hand_body_prefix
+
+        self.state_dic = {}
+        self.get_state_dic()
     
+    def get_state_dic(self):
+        for i in range(self.model.nbody):
+            body_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, i)
+            if body_name is not 'None' and self.hand_prefix in body_name:
+                pos = self.data.xpos[i]
+                quaternion = self.data.xquat[i]
+                comp = pos.tolist() + quaternion.tolist()
+                self.state_dic[body_name] = comp
+                # print(body_name, *(f'{x:.2f}' for x in comp))
+
+
+
+
+    
+
+
+
     # ===== 位置访问 =====
     @property
     def x(self):
@@ -237,6 +260,8 @@ class StateStruct:
             StateStruct: 新的状态对象
         """
         return StateStruct(
+            self.model,
+            self.data,
             position=self.position.copy(),
             quaternion=self.quaternion.copy(),
             grasp=self.grasp_synergy,

@@ -24,6 +24,8 @@ if __name__ == "__main__":
 
     # 初始状态 - 使用 StateStruct
     initial_state = StateStruct(
+        model,
+        data,
         position=[0.4, 0.4, 0.3],
         quaternion=[1.0, 0.0, 0.0, 0.0]
     )
@@ -94,6 +96,8 @@ if __name__ == "__main__":
 
                 # 构造当前执行状态用于计算控制命令
                 exec_state = StateStruct(
+                    model,
+                    data,
                     position=target_state.get_position(),
                     quaternion=target_state.get_quaternion(),
                     grasp=current_grasp,

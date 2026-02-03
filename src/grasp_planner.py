@@ -84,7 +84,7 @@ class GraspPlanner(Annealer):
         Annealer 要求 self.state 是数组，但内部使用 StateStruct 进行清晰的状态操作
         """
         # 转换为 StateStruct 便于操作
-        current = StateStruct()
+        current = StateStruct(self.model, self.data)
         current.from_array(self.state)
         
         # 位置扰动
@@ -146,7 +146,7 @@ class GraspPlanner(Annealer):
         COLLISION_THRESHOLD = -0.005  # 碰撞判定阈值(m)，<0为穿透
         
         # 将13D数组转换为StateStruct
-        state_struct = StateStruct()
+        state_struct = StateStruct(self.model, self.data)
         state_struct.from_array(self.state)
         # self.set_hand_pose(state_struct)
         

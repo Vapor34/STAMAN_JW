@@ -56,6 +56,17 @@ class GraspControl:
             'thumb_flex':['lh_THJ3', 'lh_THJ2', 'lh_THJ1'],
             'wrist':['lh_WRJ1', 'lh_WRJ2']
         }    
+        self.joint_range = {}
+        self._get_joint_ranges()
+
+    def _get_joint_ranges(self):
+        for i in range(1, self.model.njnt):
+            jnt_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, i)
+            if jnt_name is not None:
+                low, high = self.model.jnt_range[i]
+                self.joint_range[jnt_name] = (low, high)
+                
+
 
     # def _build_act_name_to_id_mapping(self):
     #     self.act_name_dic = {}
