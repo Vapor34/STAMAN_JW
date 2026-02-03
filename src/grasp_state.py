@@ -40,25 +40,9 @@ class StateStruct:
 
         self.state_dic = {}
         self.get_state_dic()
-    
-    def get_state_dic(self):
-        for i in range(self.model.nbody):
-            body_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, i)
-            if body_name is not 'None' and self.hand_prefix in body_name:
-                pos = self.data.xpos[i]
-                quaternion = self.data.xquat[i]
-                comp = pos.tolist() + quaternion.tolist()
-                self.state_dic[body_name] = comp
-                # print(body_name, *(f'{x:.2f}' for x in comp))
 
+#===== funcitons ====
 
-
-
-    
-
-
-
-    
     def get_position(self):
         """获取完整位置向量"""
         return self.position.copy()
@@ -83,6 +67,16 @@ class StateStruct:
         norm = np.linalg.norm(self.quaternion)
         if norm > 1e-6:
             self.quaternion /= norm
+
+    def get_state_dic(self):
+        for i in range(self.model.nbody):
+            body_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, i)
+            if body_name is not 'None' and self.hand_prefix in body_name:
+                pos = self.data.xpos[i]
+                quaternion = self.data.xquat[i]
+                comp = pos.tolist() + quaternion.tolist()
+                self.state_dic[body_name] = comp
+                # print(body_name, *(f'{x:.2f}' for x in comp))
     
     
     
@@ -140,6 +134,10 @@ class StateStruct:
             wrist=self.wrist_synergy
         )
     
+
+
+
+
 
 
     # ===== 位置访问 =====

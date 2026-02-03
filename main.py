@@ -37,8 +37,6 @@ if __name__ == "__main__":
     # 动画控制变量
     planning_done = False
     target_state = initial_state.copy()  # 规划得到的目标状态
-    current_grasp_val = 0.0
-    execution_start_time = 0.0
     
     with mujoco.viewer.launch_passive(model, data) as viewer:
         while viewer.is_running():
@@ -49,7 +47,7 @@ if __name__ == "__main__":
                 print("\n[状态] 正在规划最佳抓取点...")
                 
                 # 从初始状态开始扰动
-                planner.state = initial_guess.copy().to_array()
+                planner.state = initial_guess.to_array() #state=np.array[x,y,z,qw,qx,qy,qz,syn1,syn2...,syn6]
                 planner.state[0:3] += np.random.uniform(-0.05, 0.05, 3)
                 best_pose, energy = planner.anneal()
 
@@ -60,7 +58,6 @@ if __name__ == "__main__":
                 print(f"[完成] 目标 Grasp: {target_state.grasp:.2f}, Spread: {target_state.spread:.2f}")
                 print(f"[完成] 目标位置: ({target_state.x:.3f}, {target_state.y:.3f}, {target_state.z:.3f})")
                 
-                current_grasp_val = 0.0
                 execution_start_time = time.time()
                 planning_done = True
                 
@@ -113,7 +110,7 @@ if __name__ == "__main__":
 
                 # =====特定关节的固定角度（可选覆盖） =====
                 # 如果需要固定某些拇指关节的角度，在这里指定
-                controler.set_act_val('lh_THJ4', 1.0)  # 拇指近端关节
+                # controler.set_act_val('lh_THJ4', 1.0)  # 拇指近端关节
                 # ====================================
                 
                 if anim_time < 4.0 and anim_time >3.95:
