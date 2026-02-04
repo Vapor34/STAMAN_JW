@@ -97,11 +97,11 @@ if __name__ == "__main__":
                     data,
                     position=target_state.get_position(),
                     quaternion=target_state.get_quaternion(),
-                    grasp=current_grasp,
-                    curl=current_curl,
+                    grasp=target_state.grasp,
+                    curl=target_state.curl,
                     spread=target_state.spread,
                     thumb_base=target_state.thumb_base,
-                    thumb_flex=current_thumb_flex,
+                    thumb_flex=target_state.thumb_flex,
                 )
 
                 # 设置关节执行器的控制信号

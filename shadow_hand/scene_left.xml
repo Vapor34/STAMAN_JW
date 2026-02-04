@@ -27,7 +27,6 @@
 
     <body name="bottle_body" pos="0.4 0.4 0.05">
       <geom name="bottle_geom" type="mesh" mesh="bottle_mesh" rgba="0.7 0.5 0.3 1" group="0"/>
-      <freejoint/>
     </body>
     <!-- <body name="object" pos="0.3 0 0.1">
       <freejoint/>

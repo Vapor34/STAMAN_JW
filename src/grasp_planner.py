@@ -91,6 +91,7 @@ class GraspPlanner(Annealer):
         
         # 位置扰动
         # 随机扰动
+        # 假设瓶子在 [0.3, 0, 0]，限制手部只能在附近 0.5m 范围内活动
         current.position += np.random.normal(0, 0.015, 3)
         bottle_pos = self.data.xpos[self.bottle_body_id]
         current.position = np.clip(current.position, bottle_pos - 0.5, bottle_pos + 0.5)
@@ -108,10 +109,10 @@ class GraspPlanner(Annealer):
         current.spread += np.random.normal(0, 0.05)
         current.spread = np.clip(current.spread, -0.2, 0.3)
 
-        current.thumb_base += np.random.normal(0, 0.05)
+        current.thumb_base += np.random.normal(0, 0.5)
         current.thumb_base = np.clip(current.thumb_base, 0.0, 1.0)
 
-        current.thumb_flex += np.random.normal(0, 0.05)
+        current.thumb_flex += np.random.normal(0, 0.5)
         current.thumb_flex = np.clip(current.thumb_flex, 0.0, 1.0)
 
         # 转换回数组供 Annealer 使用
@@ -127,10 +128,10 @@ class GraspPlanner(Annealer):
         4. 倾向于中等抓取力度 → 既能接触又不过度闭合
         """
         # ===== 权重配置 =====
-        W_PROXIMITY = 250.0        # 接近性权重
-        W_ORIENTATION = 10.0      # 朝向性权重
-        W_COLLISION_HAND = 20.0  # 手-物碰撞惩罚
-        W_JOINT_LIMIT = 1000.0    # 关节超限惩罚
+        W_PROXIMITY = 25.0        # 接近性权重
+        W_ORIENTATION = 1    # 朝向性权重
+        W_COLLISION_HAND = 2  # 手-物碰撞惩罚
+        W_JOINT_LIMIT = 100    # 关节超限惩罚
         
         # 将13D数组转换为StateStruct
         state_struct = StateStruct(self.model, self.data)
@@ -169,7 +170,7 @@ class GraspPlanner(Annealer):
             con = self.data.contact[i]
             is_bottle = (con.geom1 in self.bottle_geom_ids or con.geom2 in self.bottle_geom_ids)
             is_hand = (con.geom1 in self.hand_geom_ids or con.geom2 in self.hand_geom_ids)
-            if is_bottle and is_hand and con.dist < 0:
+            if is_bottle and is_hand and con.dist < 0.03:
                 # 穿透越深，惩罚越大，而不是一刀切
                 collision_penalty += abs(con.dist) * W_COLLISION_HAND * 100
 
