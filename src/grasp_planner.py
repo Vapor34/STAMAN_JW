@@ -3,13 +3,12 @@
 """
 from simanneal import Annealer
 import mujoco
-import mujoco.viewer
 import numpy as np
-import time
 from simanneal import Annealer
-import argparse
 from src.grasp_state import StateStruct
 from src.grasp_control import GraspControl
+import trimesh
+import os
 
 
 class GraspPlanner(Annealer):
@@ -25,7 +24,8 @@ class GraspPlanner(Annealer):
         # get body and geom ids for bottle
         self.bottle_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, bottle_body_name)
         self.bottle_geom_ids = self._get_geoms_id_of_body(self.bottle_body_id)
-        
+
+
         # get floor geom id
         self.floor_geom_id = model.geom("floor").id
 
@@ -207,3 +207,14 @@ class GraspPlanner(Annealer):
         start_geom = self.model.body_geomadr[body_id]
         num_geoms = self.model.body_geomnum[body_id]
         return [start_geom + j for j in range(num_geoms)]
+    
+    def get_min_dist(self, body_pos):
+        #get mesh of bottle
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(current_dir, "..", "assets", "bottle.obj")
+        mesh = trimesh.load(file_path)
+
+        closest_point, distance, triangle_id = mesh.proximity.closest_point([body_pos])
+    
+        # distance[0] 即为最短距离
+        return distance[0]
