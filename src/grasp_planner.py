@@ -8,6 +8,7 @@ from simanneal import Annealer
 from src.grasp_state import StateStruct
 from src.grasp_control import GraspControl
 import trimesh
+from trimesh.proximity import closest_point
 import os
 
 
@@ -25,6 +26,13 @@ class GraspPlanner(Annealer):
         self.bottle_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, bottle_body_name)
         self.bottle_geom_ids = self._get_geoms_id_of_body(self.bottle_body_id)
 
+        raw_mesh = trimesh.load('./shadow_hand/assets/bottle.obj')
+        # 关键修正：判断是否为 Scene，如果是则合并
+        if isinstance(raw_mesh, trimesh.Scene):
+            # 将场景中所有的 mesh 合并成一个巨大的 Trimesh
+            self.bottle_mesh = raw_mesh.dump(concatenate=True)
+        else:
+            self.bottle_mesh = raw_mesh
 
         # get floor geom id
         self.floor_geom_id = model.geom("floor").id
@@ -46,6 +54,7 @@ class GraspPlanner(Annealer):
                 is_excluded = any(k in name_lower for k in excluded_keywords)
                 if not is_excluded:
                     self.contact_body_ids.append(i)
+
 
         syn_map = self.act_ctrl.get_synergy_map()
         self.syn_grasp = syn_map["grasp"] #stores ids of actuators for each synergy group
@@ -139,16 +148,19 @@ class GraspPlanner(Annealer):
         self.set_hand_pose(state_struct)
 
 
-        
+
         # ===== 1. 接近性能量：手指到物体的平均距离 =====
-        bottle_pos = self.data.xpos[self.bottle_body_id]
         total_dist = 0.0
+        bottle_pos = self.data.xpos[self.bottle_body_id]
         palm_center_pos = self.data.site_xpos[self.palm_center_site_id]
 
         for b_id in self.contact_body_ids:
             total_dist += np.linalg.norm(self.data.xpos[b_id] - bottle_pos)
         total_dist += np.linalg.norm(palm_center_pos - bottle_pos)
         proximity_energy = total_dist / (len(self.contact_body_ids)+1)
+
+
+
         
         # ===== 2. 朝向性能量：手掌法向量与指向物体方向的夹角 =====
         # 手掌法向量 = 手掌坐标系的-Y轴（指向掌心侧）
@@ -170,9 +182,9 @@ class GraspPlanner(Annealer):
             con = self.data.contact[i]
             is_bottle = (con.geom1 in self.bottle_geom_ids or con.geom2 in self.bottle_geom_ids)
             is_hand = (con.geom1 in self.hand_geom_ids or con.geom2 in self.hand_geom_ids)
-            if is_bottle and is_hand and con.dist < 0.03:
+            if is_bottle and is_hand and con.dist < 0:
                 # 穿透越深，惩罚越大，而不是一刀切
-                collision_penalty += abs(con.dist) * W_COLLISION_HAND * 100
+                collision_penalty += abs(con.dist) * W_COLLISION_HAND * 200
 
 
         
@@ -201,7 +213,6 @@ class GraspPlanner(Annealer):
             joint_limit_penalty * W_JOINT_LIMIT
         )
         return total_energy
-    
 
     def _get_geoms_id_of_body(self, body_id):
         start_geom = self.model.body_geomadr[body_id]

@@ -8,6 +8,7 @@ import os
 import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mujoco
+import mujoco.viewer
 import numpy as np
 from src.grasp_control import GraspControl
 from src.grasp_planner import GraspPlanner
@@ -46,7 +47,6 @@ try:
             # 创建初始状态
             state = StateStruct(model, data, position=[0.0, 0.0, 0.3], quaternion=[1.0, 0.0, 0.0, 0.0], grasp=0.5, spread=0.5)
             print(f"✓ 初始状态创建成功")
-            state.set_state_of_body('lh_forearm',[0,0,0,1,0,0,0])
 
 
             state.get_state_dic()
@@ -54,8 +54,10 @@ try:
 
             
             # 创建 GraspPlanner
-            # planner = GraspPlanner(state, model, data, "bottle", hand_body_prefix='lh_')
-            # print(f"✓ GraspPlanner 创建成功")
+            planner = GraspPlanner(state, model, data, "bottle", hand_body_prefix='lh_')
+            print(f"✓ GraspPlanner 创建成功")
+            print(f"type of contact_body_xpos:{type(planner.contact_body_xpos[0])}")
+            print(f"contact_body_xpos: {planner.contact_body_xpos}")
             
             # 创建 GraspControl
             grasp_ctrl = GraspControl(model, data)
