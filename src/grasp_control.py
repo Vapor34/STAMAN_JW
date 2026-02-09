@@ -60,6 +60,9 @@ class GraspControl:
         self.joint_range = {}
         self._get_joint_ranges()
 
+        self.jnt_range_dic = {}
+        self._get_jnt_range_dic()
+
     def _get_joint_ranges(self):
         for i in range(1, self.model.njnt):
             jnt_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, i)
@@ -143,6 +146,15 @@ class GraspControl:
                 act_id = self.act_name_to_id[act_name]
                 act_val = self.data.ctrl[act_id]
                 print(f"    {act_name}: {act_val:.4f}")
+
+    def _get_jnt_range_dic(self):
+        for i in (1,self.model.njnt):
+            jnt_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, i)
+            if jnt_name:
+                lower, upper = self.model.jnt_range[i]
+                self.jnt_range_dic[jnt_name] = [lower, upper]
+
+
                 
 
 

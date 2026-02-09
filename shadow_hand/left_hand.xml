@@ -114,7 +114,7 @@
         <geom size="0.0135 0.009 0.005" pos="-0.026 0 0.01" quat="-0.923879 0 -0.382684 0" type="box"
           class="plastic_collision"/>
         <body name="lh_palm" pos="0 0 0.034">
-          <site name="lh_palm_center" pos="0 0 -0.03" size="0.01" rgba="1 0 0 1" type="sphere"/>
+          <site name="lh_palm_center" pos="0 0 0.05" size="0.01" rgba="1 0 0 1" type="sphere"/>
           <inertial mass="0.3" pos="0 0 0.035" quat="1 0 0 1" diaginertia="0.0005287 0.0003581 0.000191"/>
           <joint class="wrist_x" name="lh_WRJ1"/>
           <geom class="plastic_visual" mesh="palm"/>

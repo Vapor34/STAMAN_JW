@@ -80,15 +80,15 @@ if __name__ == "__main__":
                     grasp_progress = (anim_time - grasp_start_time) / grasp_duration
                     grasp_progress = np.clip(grasp_progress, 0.0, 1.0)
                     
-                    current_grasp = target_state.grasp * grasp_progress
-                    current_curl = target_state.curl * grasp_progress
-                    current_thumb_flex = target_state.thumb_flex * grasp_progress
+                    current_grasp = np.clip(target_state.grasp + grasp_progress * 1, 0, 1.5)
+                    current_curl = np.clip(target_state.curl + grasp_progress * 1, 0, 1.5)
+                    current_thumb_flex = np.clip(target_state.thumb_flex + grasp_progress * 1, 0, 1.5)
                 else:
                     # 0-1s
-                    current_grasp = 0.0
-                    current_curl = 0.0
-                    current_thumb_base = 0.0
-                    current_thumb_flex = 0.0
+                    current_grasp = target_state.grasp
+                    current_curl = target_state.curl
+                    current_thumb_base = target_state.thumb_base
+                    current_thumb_flex = target_state.thumb_flex
                     
 
                 # 构造当前执行状态用于计算控制命令
@@ -97,11 +97,11 @@ if __name__ == "__main__":
                     data,
                     position=target_state.get_position(),
                     quaternion=target_state.get_quaternion(),
-                    grasp=target_state.grasp,
-                    curl=target_state.curl,
+                    grasp=current_grasp,
+                    curl=current_curl,
                     spread=target_state.spread,
-                    thumb_base=target_state.thumb_base,
-                    thumb_flex=target_state.thumb_flex,
+                    thumb_base=current_thumb_base,
+                    thumb_flex=current_thumb_flex,
                 )
 
                 # 设置关节执行器的控制信号
@@ -112,6 +112,10 @@ if __name__ == "__main__":
                 # 如果需要固定某些拇指关节的角度，在这里指定
                 # controler.set_act_val('lh_THJ4', 1.0)  # 拇指近端关节
                 # ====================================
+
+                """
+                TODO: make tight grasp after setting the best pose (make finger curl slowly until hold the object)
+                """
                 
                 if anim_time < 4.0 and anim_time >3.95:
                     controler.print_all_act_val()
