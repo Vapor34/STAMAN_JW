@@ -26,7 +26,6 @@ if __name__ == "__main__":
     palm_center_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, "lh_palm_center")
     initial_position = data.site_xpos[palm_center_id]
     mujoco.mj_forward(model, data)  # Ensure data is updated with initial positions
-    print(f"Initial palm center position: {initial_position}")
 
     # 初始状态 - 使用 StateStruct
     initial_state = StateStruct(
@@ -38,7 +37,7 @@ if __name__ == "__main__":
     initial_guess = initial_state
 
     planner = PositionPlanner(initial_guess, model, data, body_name='bottle_body')
-    planner.steps = 1000
+    planner.steps = 2000
 
     # 动画控制变量
     planning_done = False
@@ -154,7 +153,7 @@ if __name__ == "__main__":
                 TODO: make tight grasp after setting the best pose (make finger curl slowly until hold the object)
                 """
                 
-                if anim_time < 4.0 and anim_time >3.95:
+                if anim_time < 4.0 and anim_time >3.99:
                     controler.print_all_act_val()
                 
                 mujoco.mj_step(model, data)

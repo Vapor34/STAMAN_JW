@@ -24,41 +24,41 @@
       <default class="thumb">
         <default class="thbase">
           <joint axis="0 0 1" range="-1.0472 1.0472"/>
-          <position kp="0.015" kv="0.005" ctrlrange="-1.0472 1.0472" forcerange="-3 3"/>
+          <position kp="0.012" kv="0.035" ctrlrange="-1.0472 1.0472" forcerange="-3 3"/>
         </default>
         <default class="thproximal">
           <joint axis="-1 0 0" range="0 1.22173"/>
-          <position kp="0.02" kv="0.005" ctrlrange="0 1.22173" forcerange="-2 2"/>
+          <position kp="0.015" kv="0.035" ctrlrange="0 1.22173" forcerange="-2 2"/>
         </default>
         <default class="thhub">
           <joint axis="-1 0 0" range="-0.20944 0.20944"/>
-          <position kp="0.02" kv="0.005" ctrlrange="-0.20944 0.20944"/>
+          <position kp="0.015" kv="0.035" ctrlrange="-0.20944 0.20944"/>
         </default>
         <default class="thmiddle">
           <joint axis="0 -1 0" range="-0.698132 0.698132"/>
-          <position kp="0.05" kv="0.005" ctrlrange="-0.698132 0.698132"/>
+          <position kp="0.035" kv="0.035" ctrlrange="-0.698132 0.698132"/>
         </default>
         <default class="thdistal">
           <joint range="-0.261799 1.5708"/>
-          <position kp="0.04" kv="0.005" ctrlrange="-0.261799 1.5708"/>
+          <position kp="0.03" kv="0.035" ctrlrange="-0.261799 1.5708"/>
         </default>
       </default>
       <!-- metacarpal掌骨  knuckle指关节  proximal近中心的；近端的  middle_distal中间的_远端的-->
       <default class="metacarpal">
         <joint axis="0.573576 0 0.819152" range="0 0.785398"/>
-        <position kp="0.05" kv="0.005" ctrlrange="0 0.785398"/>
+        <position kp="0.04" kv="0.04" ctrlrange="0 0.785398"/>
       </default>
       <default class="knuckle">
         <joint axis="0 -1 0" range="-0.349066 0.349066"/>
-        <position kp="0.05" kv="0.005" ctrlrange="-0.349066 0.349066"/>
+        <position kp="0.035" kv="0.04" ctrlrange="-0.349066 0.349066"/>
       </default>
       <default class="proximal">
         <joint range="-0.261799 1.5708"/>
-        <position kp="0.06" kv="0.005" ctrlrange="-0.261799 1.5708"/>
+        <position kp="0.045" kv="0.04" ctrlrange="-0.261799 1.5708"/>
       </default>
       <default class="middle_distal">
         <joint range="0 1.5708"/>
-        <position kp="0.04" kv="0.005" ctrlrange="0 3.1415"/>
+        <position kp="0.03" kv="0.04" ctrlrange="0 3.1415"/>
       </default>
 
       <default class="plastic">
