@@ -155,11 +155,16 @@ class HandControl:
         
     def set_syn_val(self, group, value):
         """
-        Set all actuators in a synergy group to the same value
+        Set all actuators in a synergy group to a mapped value
+        
+        Maps the synergy value from [0, 1] to each actuator's ctrlrange
+        so that 0.0 maps to ctrlrange[0] and 1.0 maps to ctrlrange[1].
+        
+        For the 'spread' group, value is used directly (already in radian range).
         
         Args:
             group: Name of the synergy group
-            value: Value to apply to all actuators in the group
+            value: Normalized synergy value [0, 1] (except spread)
             
         Raises:
             ValueError: If synergy group name is unknown
@@ -168,7 +173,14 @@ class HandControl:
             raise ValueError(f"Unknown synergy group: {group}")
         act_names = self.synergy_map[group]
         for act_name in act_names:
-            self.set_act_val(act_name, value)
+            act_id = self.act_name_to_id.get(act_name)
+            if act_id is not None:
+                # Get the ctrlrange for this actuator
+                ctrl_low = self.model.actuator_ctrlrange[act_id, 0]
+                ctrl_high = self.model.actuator_ctrlrange[act_id, 1]
+                # Map [0, 1] synergy value to [ctrl_low, ctrl_high]
+                mapped_value = ctrl_low + value * (ctrl_high - ctrl_low)
+                self.data.ctrl[act_id] = mapped_value
 
     def set_hand_state(self, state: StateStruct):
         """
@@ -182,7 +194,9 @@ class HandControl:
         self.set_syn_val('spread', state.spread_synergy)
         self.set_syn_val('thumb_base', state.thumb_base_synergy)
         self.set_syn_val('thumb_flex', state.thumb_flex_synergy)
-        self.set_syn_val('wrist', state.wrist_synergy)
+        # Keep wrist fixed at 0 (no wrist motion)
+        for act_name in self.synergy_map['wrist']:
+            self.set_act_val(act_name, 0.0)
     
     def get_synergy_map(self):
         """Get complete synergy map"""

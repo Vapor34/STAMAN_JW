@@ -12,10 +12,7 @@ import numpy as np
 from core.hand_state import StateStruct
 from core.hand_control import HandControl
 import trimesh
-from trimesh.proximity import closest_point
-import trimesh.proximity as proximity
-import os
-import fast_simplification
+from trimesh.proximity import signed_distance
 
 
 class PositionPlanner(Annealer):
@@ -55,43 +52,47 @@ class PositionPlanner(Annealer):
         else:
             self.obj_mesh = raw_mesh
         
-        vertices = self.obj_mesh.vertices
-        faces = self.obj_mesh.faces
-        new_vertices, new_faces = fast_simplification.simplify(
-            vertices, faces, target_count=500
-        )
-        self.obj_mesh = trimesh.Trimesh(vertices=new_vertices, faces=new_faces)
+        # Apply the same scale as in MuJoCo scene XML (scale="0.15 0.15 0.15")
+        self.obj_mesh.apply_scale(0.15)
+        
+        # NOTE: Do NOT simplify the mesh with fast_simplification!
+        # Simplification breaks trimesh.signed_distance (flips normals/winding),
+        # making penetration detection completely unreliable.
+        # The original mesh (2378 faces) is fast enough (~5ms per signed_distance call).
 
         # Get floor geom ID
         self.floor_geom_id = model.geom("floor").id
 
-        # Get palm body ID
+        # Get palm body ID (for orientation calculation)
         self.palm_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"{self.hand_prefix}palm")
-        self.palm_center_site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, "lh_palm_center")
-        if self.palm_center_site_id == -1:
-            print("Warning: Site 'lh_palm_center' not found!")
 
-        # Collect hand geometry and contact points
+        # Collect hand geometry IDs (for collision detection - include ALL hand bodies)
         self.hand_geom_ids = []
-        self.contact_body_ids = []
-        excluded_keywords = ['wrist', 'forearm', 'palm']
         for i in range(model.nbody):
             name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, i)
             if name and self.hand_prefix in name:
                 self.hand_geom_ids.extend(self._get_geoms_id_of_body(i))
-                name_lower = name.lower()
-                is_excluded = any(k in name_lower for k in excluded_keywords)
-                if not is_excluded:
-                    self.contact_body_ids.append(i)
 
-        # Build synergy variable mappings
-        syn_map = self.act_ctrl.get_synergy_map()
-        self.syn_grasp = syn_map["grasp"]
-        self.syn_curl = syn_map["curl"]
-        self.syn_spread = syn_map["spread"]
-        self.syn_thumb_base = syn_map["thumb_base"]
-        self.syn_thumb_flex = syn_map["thumb_flex"]
-        self.syn_wrist = syn_map["wrist"]
+        # Contact bodies for proximity optimization: only distal + middle bodies
+        # Exclude knuckle, proximal, metacarpal, thbase, thhub - these are structural
+        # bodies near the palm that would bias the optimizer to move the palm into the object
+        # rather than curling fingers around it.
+        # Weight: distal (fingertip) bodies get higher weight than middle bodies.
+        self.contact_body_ids = []
+        self.contact_body_weights = []
+        contact_keywords_high = ['distal']     # fingertips: weight 3.0
+        contact_keywords_low = ['middle']      # mid-phalanx: weight 1.0
+        for i in range(model.nbody):
+            name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, i)
+            if name and self.hand_prefix in name:
+                name_lower = name.lower()
+                if any(k in name_lower for k in contact_keywords_high):
+                    self.contact_body_ids.append(i)
+                    self.contact_body_weights.append(3.0)
+                elif any(k in name_lower for k in contact_keywords_low):
+                    self.contact_body_ids.append(i)
+                    self.contact_body_weights.append(1.0)
+        self.contact_body_weights = np.array(self.contact_body_weights)
 
         super(PositionPlanner, self).__init__(state)
 
@@ -110,8 +111,14 @@ class PositionPlanner(Annealer):
         """
         # Set base position and quaternion
         palm_pos = state_struct.get_position()
-        self.data.qpos[0:3] = [palm_pos[0], palm_pos[1], palm_pos[2]-state_struct.offset[2]]
-        self.data.qpos[3:7] = state_struct.get_quaternion()
+        quat = state_struct.get_quaternion()
+        # Rotate offset by current orientation to get correct world-frame offset
+        rot_mat = np.zeros(9)
+        mujoco.mju_quat2Mat(rot_mat, quat)
+        rot_mat = rot_mat.reshape(3, 3)
+        world_offset = rot_mat @ state_struct.offset
+        self.data.qpos[0:3] = palm_pos - world_offset
+        self.data.qpos[3:7] = quat
         
         # Apply synergy values to actuators
         self.act_ctrl.set_hand_state(state_struct)
@@ -137,8 +144,8 @@ class PositionPlanner(Annealer):
             temp_scale = 1.0
         
         # Position perturbation with bounds
-        pos_step = 0.00015 * temp_scale
-        current.position +=  + np.random.normal(0, pos_step, 3)
+        pos_step = 0.01 * temp_scale
+        current.position += np.random.normal(0, pos_step, 3)
         obj_pos = self.data.xpos[self.obj_body_id]
         current.position = np.clip(current.position, obj_pos - 1, obj_pos + 1)
 
@@ -176,9 +183,10 @@ class PositionPlanner(Annealer):
         Energy function to minimize
         
         Calculates grasp quality metric combining:
-        1. Proximity: Average distance from fingers to object surface
-        2. Palm alignment: Hand orientation alignment with object
-        3. Collision avoidance: Penalty for penetration
+        1. Proximity: Finger distal/middle bodies close to object surface
+        2. Penetration: Hard penalty for bodies inside the object
+        3. Finger direction: Fingertips should point toward the object
+        4. Collision: Penalty for self-collision and floor contact
         
         Returns:
             float: Total energy (lower is better)
@@ -192,60 +200,55 @@ class PositionPlanner(Annealer):
         b_pos = self.data.xpos[self.obj_body_id]
         b_mat = self.data.xmat[self.obj_body_id].reshape(3, 3)
         points_world = self.data.xpos[self.contact_body_ids]
-        palm_center_pos = self.data.site_xpos[self.palm_center_site_id]
         
-        # Stack all query points
-        all_query_points_world = np.vstack([points_world, palm_center_pos])
+        # Transform contact body positions to object local frame
+        points_local = (points_world - b_pos) @ b_mat.T
         
-        # Transform to object local coordinate system
-        all_points_local = (all_query_points_world - b_pos) @ b_mat
+        # Signed distance: positive = INSIDE (penetrating), negative = OUTSIDE
+        s_dists = signed_distance(self.obj_mesh, points_local)
         
-        # Batch signed distance queries on mesh (positive outside, negative inside)
-        dists = proximity.signed_distance(self.obj_mesh, all_points_local)
+        # ---- Finger proximity + penetration (weighted by body importance) ----
+        target_dist = 0.005  # ideal ~5mm from surface
         
-        # For closest points, still need them for palm alignment
-        closest_points_local, _, _ = closest_point(self.obj_mesh, all_points_local)
+        proximity_energy = 0.0
+        penetration_energy = 0.0
         
-        # Extract finger and palm distances
-        finger_dists = dists[:-1]
-        palm_closest_point_local = closest_points_local[-1]
-        # #---------
-        # 各距离的平方和（对穿透更敏感）
-        proximity_energy = np.sum(finger_dists**2)
+        for idx, sd in enumerate(s_dists):
+            w = self.contact_body_weights[idx]
+            if sd > 0:
+                # INSIDE the object: very heavy penalty
+                penetration_energy += (10000.0 + sd * 50000.0) * w
+            else:
+                # OUTSIDE: penalize distance from target
+                # Linear + quadratic: strong pull far away, precision near target
+                deviation = max(0.0, abs(sd) - target_dist)
+                proximity_energy += w * (deviation + deviation ** 2)
 
-        # # 或者取最大值（关注最远的那根）
-        # proximity_energy = np.max(np.abs(finger_dists))
-
-        # # 也可以组合：sum of squares + max 等
-        # #--------------
-        
-        # Palm distance term
-        palm_dist = np.linalg.norm(palm_center_pos - b_pos)
-        
-        # Orientation alignment: compute angle between palm normal and surface normal
-        target_point_world = palm_closest_point_local @ b_mat.T + b_pos
-        vec_to_surface = target_point_world - palm_center_pos
-        
-        dist_to_surface = np.linalg.norm(vec_to_surface)
-        vec_to_surface_norm = vec_to_surface / (dist_to_surface + 1e-6)
-        
+        # ---- Finger direction: Z axis should point toward object ----
         palm_rot = self.data.xmat[self.palm_body_id].reshape(3, 3)
-        palm_normal = -palm_rot[:, 1]
-        
-        orientation_energy = 1.0 - np.dot(palm_normal, vec_to_surface_norm)
+        palm_pos = self.data.xpos[self.palm_body_id]
+        finger_dir = palm_rot[:, 2]  # Z axis = fingertip direction
+        vec_to_obj = b_pos - palm_pos
+        vec_to_obj_norm = vec_to_obj / (np.linalg.norm(vec_to_obj) + 1e-6)
+        finger_dir_energy = 1.0 - np.dot(finger_dir, vec_to_obj_norm)
 
-        # Collision penalty
+        # ---- MuJoCo collision penalty (self-collision and floor only) ----
         collision_penalty = 0.0
         for i in range(self.data.ncon):
             con = self.data.contact[i]
-            if con.dist < 0: 
-                collision_penalty += 10.0 + abs(con.dist) * 5000
+            if con.dist < 0:
+                g1, g2 = con.geom1, con.geom2
+                is_hand1 = g1 in self.hand_geom_ids
+                is_hand2 = g2 in self.hand_geom_ids
+                is_floor = (g1 == self.floor_geom_id or g2 == self.floor_geom_id)
+                if (is_hand1 and is_hand2) or is_floor:
+                    collision_penalty += 10.0 + abs(con.dist) * 50000
 
-        # Weighted sum of all energy terms
+        # Weighted sum
         total_energy = (
-            proximity_energy * 100.0 + 
-            palm_dist * 100.0 +
-            orientation_energy * 10.0 +
+            proximity_energy * 100.0 +
+            penetration_energy +
+            finger_dir_energy * 200.0 +
             collision_penalty
         )
 
@@ -265,19 +268,3 @@ class PositionPlanner(Annealer):
         num_geoms = self.model.body_geomnum[body_id]
         return [start_geom + j for j in range(num_geoms)]
     
-    def get_min_dist(self, body_pos):
-        """
-        Calculate minimum distance from a point to obj surface
-        
-        Args:
-            body_pos: Query point position
-            
-        Returns:
-            float: Minimum distance to mesh surface
-        """
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(current_dir, "..", "assets", "bottle.obj")
-        mesh = trimesh.load(file_path)
-
-        closest_point_val, distance, triangle_id = mesh.proximity.closest_point([body_pos])
-        return distance[0]

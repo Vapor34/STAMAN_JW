@@ -23,9 +23,13 @@ if __name__ == "__main__":
     model, data = mujoco_load(args.model_path)
     controler = HandControl(model, data)
 
-    palm_center_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, "lh_palm_center")
-    initial_position = data.site_xpos[palm_center_id]
-    mujoco.mj_forward(model, data)  # Ensure data is updated with initial positions
+    mujoco.mj_forward(model, data)  # Ensure data is updated BEFORE reading positions
+
+    # Initialize near the object for effective search
+    obj_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, 'bottle_body')
+    obj_pos = data.xpos[obj_body_id].copy()
+    # Start slightly above the object to allow the annealer to find a good approach
+    initial_position = obj_pos + np.array([0.0, 0.0, 0.15])
 
     # 初始状态 - 使用 StateStruct
     initial_state = StateStruct(
@@ -37,7 +41,15 @@ if __name__ == "__main__":
     initial_guess = initial_state
 
     planner = PositionPlanner(initial_guess, model, data, body_name='bottle_body')
-    planner.steps = 2000
+    planner.steps = 1000
+
+    # Find bottle freejoint qpos index to pin bottle during approach
+    bottle_jnt_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, 'bottle_body_freejoint')
+    if bottle_jnt_id == -1:
+        # freejoint might be unnamed; find it via body jntadr
+        bottle_jnt_id = model.body_jntadr[obj_body_id]
+    bottle_qpos_adr = model.jnt_qposadr[bottle_jnt_id]
+    bottle_qpos_saved = data.qpos[bottle_qpos_adr:bottle_qpos_adr+7].copy()
 
     # 动画控制变量
     planning_done = False
@@ -82,7 +94,7 @@ if __name__ == "__main__":
                 data.qpos[3:7] = target_state.get_quaternion()
                 
                 # 1.0s ~ 3.0s：手指闭合
-                grasp_start_time = 1.0
+                grasp_start_time = 3.0
                 grasp_duration = 2.0
                 
                 if anim_time > grasp_start_time:
@@ -155,6 +167,13 @@ if __name__ == "__main__":
                 
                 if anim_time < 4.0 and anim_time >3.99:
                     controler.print_all_act_val()
+                
+                # Pin bottle position during approach and initial grasp
+                # to prevent it from being pushed away before fingers close
+                # grasp_settled_time = grasp_start_time + grasp_duration
+                # if anim_time < grasp_settled_time:
+                #     data.qpos[bottle_qpos_adr:bottle_qpos_adr+7] = bottle_qpos_saved
+                #     data.qvel[model.jnt_dofadr[bottle_jnt_id]:model.jnt_dofadr[bottle_jnt_id]+6] = 0.0
                 
                 mujoco.mj_step(model, data)
                 # # 开始分帧执行抓取，不要一次性调用 execute，否则肉眼看不出动作
