@@ -6,28 +6,29 @@ by minimizing an energy function that balances contact proximity,
 orientation, and collision constraints.
 """
 
-from simanneal import Annealer
 import mujoco
 import numpy as np
-from core.hand_state import StateStruct
-from core.hand_control import HandControl
 import trimesh
+from simanneal import Annealer
 from trimesh.proximity import signed_distance
+
+from core.hand_control import HandControl
+from core.hand_state import StateStruct
 
 
 class PositionPlanner(Annealer):
     """
     Simulated annealing planner for Shadow Hand grasp optimization
-    
+
     Finds pre-pose(position, orientation, synergy values) to prepare for grasping
     while minimizing contact distance, ensuring proper orientation,
     and avoiding collisions.
     """
-    
-    def __init__(self, state, model, data, body_name, hand_body_prefix='lh_'):
+
+    def __init__(self, state, model, data, body_name, hand_body_prefix="lh_"):
         """
         Initialize grasp planner
-        
+
         Args:
             state: Initial state as 13D array or StateStruct
             model: MuJoCo model
@@ -45,16 +46,16 @@ class PositionPlanner(Annealer):
         self.obj_geom_ids = self._get_geoms_id_of_body(self.obj_body_id)
 
         # Load and simplify obj mesh
-        raw_mesh = trimesh.load('./configs/assets/bottle.obj')
+        raw_mesh = trimesh.load("./configs/assets/bottle.obj")
         # Handle Scene objects by merging meshes
         if isinstance(raw_mesh, trimesh.Scene):
             self.obj_mesh = raw_mesh.dump(concatenate=True)
         else:
             self.obj_mesh = raw_mesh
-        
+
         # Apply the same scale as in MuJoCo scene XML (scale="0.15 0.15 0.15")
         self.obj_mesh.apply_scale(0.15)
-        
+
         # NOTE: Do NOT simplify the mesh with fast_simplification!
         # Simplification breaks trimesh.signed_distance (flips normals/winding),
         # making penetration detection completely unreliable.
@@ -64,7 +65,11 @@ class PositionPlanner(Annealer):
         self.floor_geom_id = model.geom("floor").id
 
         # Get palm body ID (for orientation calculation)
-        self.palm_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"{self.hand_prefix}palm")
+        self.palm_body_id = mujoco.mj_name2id(
+            model,
+            mujoco.mjtObj.mjOBJ_BODY,
+            f"{self.hand_prefix}palm",
+        )
 
         # Collect hand geometry IDs (for collision detection - include ALL hand bodies)
         self.hand_geom_ids = []
@@ -80,8 +85,8 @@ class PositionPlanner(Annealer):
         # Weight: distal (fingertip) bodies get higher weight than middle bodies.
         self.contact_body_ids = []
         self.contact_body_weights = []
-        contact_keywords_high = ['distal']     # fingertips: weight 3.0
-        contact_keywords_low = ['middle']      # mid-phalanx: weight 1.0
+        contact_keywords_high = ["distal"]  # fingertips: weight 3.0
+        contact_keywords_low = ["middle"]  # mid-phalanx: weight 1.0
         for i in range(model.nbody):
             name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, i)
             if name and self.hand_prefix in name:
@@ -99,13 +104,13 @@ class PositionPlanner(Annealer):
     def set_hand_pose(self, state_struct):
         """
         Apply hand pose configuration to MuJoCo simulation
-        
+
         Maps 13D synergy state to hand configuration by setting:
         - Base position and orientation (7D)
         - Joint angles via synergy variables (6D)
-        
+
         Then performs forward kinematics to update all body positions.
-        
+
         Args:
             state_struct: StateStruct with desired pose
         """
@@ -119,30 +124,30 @@ class PositionPlanner(Annealer):
         world_offset = rot_mat @ state_struct.offset
         self.data.qpos[0:3] = palm_pos - world_offset
         self.data.qpos[3:7] = quat
-        
+
         # Apply synergy values to actuators
         self.act_ctrl.set_hand_state(state_struct)
-        
+
         # Perform forward kinematics
         mujoco.mj_forward(self.model, self.data)
 
     def move(self):
         """
         Simulated annealing perturbation step with temperature-adaptive step sizes
-        
+
         Applies small random changes to hand pose while respecting constraints.
         Step sizes scale with temperature for better exploration at high T and exploitation at low T.
         """
         # Convert to StateStruct for convenient manipulation
         current = StateStruct(self.model, self.data)
         current.from_array(self.state)
-        
+
         # Temperature-adaptive scaling (higher T = larger steps)
-        if hasattr(self, 'T') and hasattr(self, 'Tmax') and self.Tmax > 0:
+        if hasattr(self, "T") and hasattr(self, "Tmax") and self.Tmax > 0:
             temp_scale = max(0.1, self.T / self.Tmax)
         else:
             temp_scale = 1.0
-        
+
         # Position perturbation with bounds
         pos_step = 0.01 * temp_scale
         current.position += np.random.normal(0, pos_step, 3)
@@ -153,7 +158,7 @@ class PositionPlanner(Annealer):
         quat_step = 0.05 * temp_scale
         current.quaternion += np.random.normal(0, quat_step, 4)
         current._normalize_quaternion()
-        
+
         # Synergy variable perturbations with value clipping
         grasp_step = 0.08 * temp_scale
         current.grasp += np.random.normal(0, grasp_step)
@@ -181,13 +186,13 @@ class PositionPlanner(Annealer):
     def energy(self):
         """
         Energy function to minimize
-        
+
         Calculates grasp quality metric combining:
         1. Proximity: Finger distal/middle bodies close to object surface
         2. Penetration: Hard penalty for bodies inside the object
         3. Finger direction: Fingertips should point toward the object
         4. Collision: Penalty for self-collision and floor contact
-        
+
         Returns:
             float: Total energy (lower is better)
         """
@@ -200,19 +205,19 @@ class PositionPlanner(Annealer):
         b_pos = self.data.xpos[self.obj_body_id]
         b_mat = self.data.xmat[self.obj_body_id].reshape(3, 3)
         points_world = self.data.xpos[self.contact_body_ids]
-        
+
         # Transform contact body positions to object local frame
         points_local = (points_world - b_pos) @ b_mat.T
-        
+
         # Signed distance: positive = INSIDE (penetrating), negative = OUTSIDE
         s_dists = signed_distance(self.obj_mesh, points_local)
-        
+
         # ---- Finger proximity + penetration (weighted by body importance) ----
         target_dist = 0.005  # ideal ~5mm from surface
-        
+
         proximity_energy = 0.0
         penetration_energy = 0.0
-        
+
         for idx, sd in enumerate(s_dists):
             w = self.contact_body_weights[idx]
             if sd > 0:
@@ -232,7 +237,8 @@ class PositionPlanner(Annealer):
         vec_to_obj_norm = vec_to_obj / (np.linalg.norm(vec_to_obj) + 1e-6)
         finger_dir_energy = 1.0 - np.dot(finger_dir, vec_to_obj_norm)
 
-        # ---- MuJoCo collision penalty (self-collision and floor only) ----
+        # ---- MuJoCo collision penalty ----
+        # Penalize ALL interpenetration: hand-object, self-collision, and floor
         collision_penalty = 0.0
         for i in range(self.data.ncon):
             con = self.data.contact[i]
@@ -240,15 +246,24 @@ class PositionPlanner(Annealer):
                 g1, g2 = con.geom1, con.geom2
                 is_hand1 = g1 in self.hand_geom_ids
                 is_hand2 = g2 in self.hand_geom_ids
+                is_obj = (g1 in self.obj_geom_ids or g2 in self.obj_geom_ids)
                 is_floor = (g1 == self.floor_geom_id or g2 == self.floor_geom_id)
-                if (is_hand1 and is_hand2) or is_floor:
-                    collision_penalty += 10.0 + abs(con.dist) * 50000
+
+                if (is_hand1 or is_hand2) and is_obj:
+                    # Hand-object penetration: heavy penalty
+                    collision_penalty += 500.0 + abs(con.dist) * 50000
+                elif is_hand1 and is_hand2:
+                    # Self-collision
+                    collision_penalty += 500.0 + abs(con.dist) * 50000
+                elif (is_hand1 or is_hand2) and is_floor:
+                    # Floor collision
+                    collision_penalty += 500.0 + abs(con.dist) * 50000
 
         # Weighted sum
         total_energy = (
             proximity_energy * 100.0 +
             penetration_energy +
-            finger_dir_energy * 200.0 +
+            finger_dir_energy * 50.0 +
             collision_penalty
         )
 
@@ -257,14 +272,14 @@ class PositionPlanner(Annealer):
     def _get_geoms_id_of_body(self, body_id):
         """
         Get all geometry IDs for a body
-        
+
         Args:
             body_id: Index of the body
-            
+
         Returns:
             list: Geometry IDs associated with this body
         """
         start_geom = self.model.body_geomadr[body_id]
         num_geoms = self.model.body_geomnum[body_id]
         return [start_geom + j for j in range(num_geoms)]
-    
+
