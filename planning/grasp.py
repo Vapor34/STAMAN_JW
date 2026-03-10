@@ -32,17 +32,17 @@ class GraspConfig:
 class GraspExecutor:
     """Execute grasp motion after pre-grasp planning is complete."""
 
-    def __init__(self, model, data, controller, planner, target_state, config=None):
+    def __init__(self, model, data, controller, planner, pre_grasp_state, config=None):
         self.model = model
         self.data = data
         self.controller = controller
         self.planner = planner
-        self.target_state = target_state
+        self.pre_grasp_state = pre_grasp_state
         self.config = config or GraspConfig()
 
         self.hand_base_qpos_adr, self.hand_base_dof_adr = self._get_hand_base_joint_indices()
         self.locked_synergies = {}
-
+        
     def _get_hand_base_joint_indices(self):
         hand_base_jnt_id = mujoco.mj_name2id(
             self.model,
@@ -61,8 +61,8 @@ class GraspExecutor:
         return set()
 
     def _lock_hand_base(self):
-        base_pos = self.target_state.get_position()
-        base_quat = self.target_state.get_quaternion()
+        base_pos = self.pre_grasp_state.get_position()
+        base_quat = self.pre_grasp_state.get_quaternion()
 
         self.data.qpos[self.hand_base_qpos_adr : self.hand_base_qpos_adr + 3] = base_pos
         self.data.qpos[self.hand_base_qpos_adr + 3 : self.hand_base_qpos_adr + 7] = base_quat
@@ -72,19 +72,19 @@ class GraspExecutor:
     def _compute_current_synergies(self, anim_time):
         if anim_time <= self.config.grasp_start_time:
             return (
-                self.target_state.grasp,
-                self.target_state.curl,
-                self.target_state.thumb_base,
-                self.target_state.thumb_flex,
+                self.pre_grasp_state.grasp,
+                self.pre_grasp_state.curl,
+                self.pre_grasp_state.thumb_base,
+                self.pre_grasp_state.thumb_flex,
             )
 
         grasp_progress = (anim_time - self.config.grasp_start_time) / self.config.grasp_duration
         grasp_progress = np.clip(grasp_progress, 0.0, 1.0)
 
         desired_values = {
-            "grasp": np.clip(self.target_state.grasp + grasp_progress, 0.0, 1.0),
-            "curl": np.clip(self.target_state.curl + grasp_progress, 0.0, 1.0),
-            "thumb_flex": np.clip(self.target_state.thumb_flex + grasp_progress, 0.0, 1.0),
+            "grasp": np.clip(self.pre_grasp_state.grasp + grasp_progress, 0.0, 1.0),
+            "curl": np.clip(self.pre_grasp_state.curl + grasp_progress, 0.0, 1.0),
+            "thumb_flex": np.clip(self.pre_grasp_state.thumb_flex + grasp_progress, 0.0, 1.0),
         }
 
         force_buf = np.zeros(6)
@@ -122,7 +122,7 @@ class GraspExecutor:
 
         current_grasp = self.locked_synergies.get("grasp", desired_values["grasp"])
         current_curl = self.locked_synergies.get("curl", desired_values["curl"])
-        current_thumb_base = self.target_state.thumb_base
+        current_thumb_base = self.pre_grasp_state.thumb_base
         current_thumb_flex = self.locked_synergies.get("thumb_flex", desired_values["thumb_flex"])
 
         return current_grasp, current_curl, current_thumb_base, current_thumb_flex
@@ -138,11 +138,11 @@ class GraspExecutor:
         exec_state = StateStruct(
             self.model,
             self.data,
-            position=self.target_state.get_position(),
-            quaternion=self.target_state.get_quaternion(),
+            position=self.pre_grasp_state.get_position(),
+            quaternion=self.pre_grasp_state.get_quaternion(),
             grasp=current_grasp,
             curl=current_curl,
-            spread=self.target_state.spread,
+            spread=self.pre_grasp_state.spread,
             thumb_base=current_thumb_base,
             thumb_flex=current_thumb_flex,
         )
