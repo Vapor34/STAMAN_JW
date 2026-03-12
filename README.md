@@ -3,7 +3,7 @@
 
 This repository focuses on advanced robotic manipulation, combining heuristic optimization for grasp planning with robust force-based control strategies. The project aims to generate optimal pre-grasp poses and execute stable grasps in complex environments.
 
-## 🚀 Features
+## 🚀 What have done
 
 ### 1. Pre-grasp Pose Space Generation (Simulated Annealing)
 
@@ -16,30 +16,39 @@ We utilize the **Simulated Annealing (SA)** algorithm to explore the high-dimens
 
 Implementation of active force control to manage interactions between the gripper and the object.
 
-* **Contact Stability:** Ensures consistent gripping force to prevent slippage or object damage.
-* **Sensor Integration:** Supports real-time feedback from force/torque sensors.
+* **Admittance Control:** * Implementing a mass-spring-damper dynamics model to allow the robot to react compliantly to external forces.
+
+### 3. Grasp Evaluation
+* **Grasp Scoring System:** * A comprehensive evaluation suite to rank generated poses.
+* Metrics will include Force Closure and GWS (Grasp Wrench Space) analysis.
 
 ## 🛠 Planned Modules (Roadmap)
 
 We are actively expanding the framework to include the following features:
+* **RL**
+* **Improvement of Planning Strategy**
 
-* **Admittance Control:** * Implementing a mass-spring-damper dynamics model to allow the robot to react compliantly to external forces.
 
 
 
-* **Grasp Scoring System:** * A comprehensive evaluation suite to rank generated poses.
-* Metrics will include Force Closure, GWS (Grasp Wrench Space) analysis, and success rate statistics.
+
+
 
 ## Shortcuts
 
 ![Grasp pos1](/readme_doc/pos1.png)
 
-![Grasp pos1](/readme_doc/pos2.png)
-
 ![Grasp pos1](/readme_doc/pos3.png)
 
 ![Grasp pos1](/readme_doc/pos4.png)
 
+![Grasp pos1](/readme_doc/pos2.png)
+
+![Grasp pos1](/readme_doc/pos5.png)
+
+![Grasp pos1](/readme_doc/eval1.png)
+
+![Grasp pos1](/readme_doc/eval2.png)
 
 ## 📦 Installation
 

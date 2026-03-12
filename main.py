@@ -8,6 +8,7 @@ from core.simulator import mujoco_load
 from core.hand_state import StateStruct
 from core.hand_control import HandControl
 from planning.grasp import GraspExecutor
+from planning.evaluation import GraspEvaluator
 from planning.position_planner import PositionPlanner
 
 
@@ -35,6 +36,8 @@ def main():
 
     mujoco.mj_forward(model, data)
 
+    evaluator = GraspEvaluator(model, data, OBJECT_BODY_NAME)
+
     obj_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, OBJECT_BODY_NAME)
     obj_pos = data.xpos[obj_body_id].copy()
     initial_position = obj_pos + INITIAL_Z_OFFSET
@@ -53,37 +56,8 @@ def main():
     pre_grasp_state = initial_state.copy()
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
-#------------------reproduce by pressing the 'reset' button-------------------
-    #     while viewer.is_running():
-    #         step_start = time.time()
-    #         if data.time < PLANNING_TIME_EPS:
-    #             print("\n[状态] 正在规划最佳抓取点...")
 
-    #             planner.state = initial_guess.to_array()
-    #             planner.state[0:3] += np.random.uniform(-INITIAL_RANDOM_POS_PERTURB, INITIAL_RANDOM_POS_PERTURB, 3)
-    #             best_pose, _ = planner.anneal()
-
-    #             pre_grasp_state.from_array(best_pose)
-    #             print(f"[完成] 目标 Grasp: {pre_grasp_state.grasp:.2f}, Spread: {pre_grasp_state.spread:.2f}")
-    #             print(f"[完成] 目标位置: ({pre_grasp_state.x:.3f}, {pre_grasp_state.y:.3f}, {pre_grasp_state.z:.3f})")
-
-    #             execution_start_time = time.time()
-    #             planning_done = True
-    #             grasp_executor = GraspExecutor(model, data, controller, planner, pre_grasp_state)
-
-    #             data.time = PLANNING_TIME_EPS
-
-    #         if planning_done:
-    #             anim_time = time.time() - execution_start_time
-    #             grasp_executor.step(anim_time)
-
-    #         viewer.sync()
-
-    #         time_until_next_step = model.opt.timestep - (time.time() - step_start)
-    #         if time_until_next_step > 0:
-    #             time.sleep(time_until_next_step)
-#------------------------------------------------------------------------------
-# #------------------reproduce consecutively for n times-------------------
+#------------------reproduce consecutively for n times-------------------
         for loop_idx in range(NUM_GRASP_ATTEMPTS):
             if not viewer.is_running():
                 break
@@ -126,7 +100,50 @@ def main():
                 time_until_next_step = model.opt.timestep - (time.time() - step_start)
                 if time_until_next_step > 0:
                     time.sleep(time_until_next_step)
-# #--------------------------------------------------------------------------
+
+            # Evaluate grasp quality
+            result = evaluator.evaluate()
+            fc_str = "✅ 力闭合" if result["is_force_closure"] else "❌ 未力闭合"
+            print(f"\n[评估] 第 {loop_idx + 1} 次抓取: {fc_str}")
+            print(f"  闭合裕度: {result['closure_margin']:.4f}")
+            print(f"  接触点数: {result['num_contacts']}")
+            print(f"  接触部位: {', '.join(result['contact_bodies']) or '无'}")
+#--------------------------------------------------------------------------
+
+
+#------------------reproduce by pressing the 'reset' button-------------------
+    #     while viewer.is_running():
+    #         step_start = time.time()
+    #         if data.time < PLANNING_TIME_EPS:
+    #             print("\n[状态] 正在规划最佳抓取点...")
+
+    #             planner.state = initial_guess.to_array()
+    #             planner.state[0:3] += np.random.uniform(-INITIAL_RANDOM_POS_PERTURB, INITIAL_RANDOM_POS_PERTURB, 3)
+    #             best_pose, _ = planner.anneal()
+
+    #             pre_grasp_state.from_array(best_pose)
+    #             print(f"[完成] 目标 Grasp: {pre_grasp_state.grasp:.2f}, Spread: {pre_grasp_state.spread:.2f}")
+    #             print(f"[完成] 目标位置: ({pre_grasp_state.x:.3f}, {pre_grasp_state.y:.3f}, {pre_grasp_state.z:.3f})")
+
+    #             execution_start_time = time.time()
+    #             planning_done = True
+    #             grasp_executor = GraspExecutor(model, data, controller, planner, pre_grasp_state)
+
+    #             data.time = PLANNING_TIME_EPS
+
+    #         if planning_done:
+    #             anim_time = time.time() - execution_start_time
+    #             grasp_executor.step(anim_time)
+
+    #         viewer.sync()
+
+    #         time_until_next_step = model.opt.timestep - (time.time() - step_start)
+    #         if time_until_next_step > 0:
+    #             time.sleep(time_until_next_step)
+#------------------------------------------------------------------------------
+
+
+
 
 if __name__ == "__main__":
     main()
