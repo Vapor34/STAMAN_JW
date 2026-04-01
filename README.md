@@ -56,7 +56,16 @@ We are actively expanding the framework to include the following features:
 # Clone the repository
 git clone https://github.com/your-username/your-repo-name.git
 
-# Install dependencies 
+# Install dependencies
+# create a virtual env
+
+conda create --name env_name pyhton=3.12
+conda activate
+
+# in venv
+conda install pip
+pip install -r requirements.txt 
+
 ```
 
 ## 💻 Usage
